@@ -27,10 +27,10 @@ print(adataFull.obs.head())
 print("Gene metadata (.var):")
 print(adataFull.var.head())
 
-#cut data into pieces for faster prototyping
+# Cut data into pieces for faster prototyping
 num_cells = adataFull.shape[0]
 indices = np.random.permutation(num_cells)
-split = indices[:num_cells // 60]
+split = indices[:num_cells // 20]
 adata = adataFull[split].copy()
 print('data split')
 
@@ -42,7 +42,7 @@ sc.pp.normalize_total(adata, target_sum=1e6, exclude_highly_expressed=True, inpl
 print('preprocessing done')
 
 # Run PCA to reduce dimensionality
-sc.pp.pca(adata, n_comps=50)
+sc.pp.pca(adata, n_comps=20)
 print('PCA done')
 print(adata)
 

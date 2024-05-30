@@ -15,8 +15,8 @@ logger = logging.getLogger('logger')
 logging.basicConfig(level=logging.INFO)
 
 # Load AnnData objects
-adata1 = sc.read_h5ad("C:/Users/arkho/OneDrive/Desktop/adata3.h5ad")
-adata2 = sc.read_h5ad("C:/Users/arkho/OneDrive/Desktop/adata4.h5ad")
+adata1 = sc.read_h5ad("C:/Users/arkho/OneDrive/Desktop/adata5.h5ad")
+adata2 = sc.read_h5ad("C:/Users/arkho/OneDrive/Desktop/adata6.h5ad")
 
 logger.info(adata1)
 logger.info(adata2)
@@ -62,7 +62,7 @@ kdtree1 = KDTree(coords1)
 kdtree2 = KDTree(coords2)
 
 # Define distance threshold
-distance_threshold = 0.2
+distance_threshold = 1
 
 # Use query_ball_tree to find neighboring cells
 neighbour_indices = kdtree1.query_ball_tree(kdtree2, distance_threshold)
@@ -74,10 +74,10 @@ distances_matrix = np.full((coords1.shape[0], coords2.shape[0]), 2147483647)
 fig, neighours_fig = plt.subplots(figsize=(15, 10), dpi=250)
 
 # Plot all cells from both datasets
-neighours_fig.scatter(coords1[:, 0], coords1[:, 1], c='blue', label='adata1', alpha=0.5)
-neighours_fig.scatter(coords2[:, 0], coords2[:, 1], c='red', label='adata2', alpha=0.5)
+neighours_fig.scatter(coords1[:, 0], coords1[:, 1], c='blue', label='adata1', alpha=0.5, s=5)
+neighours_fig.scatter(coords2[:, 0], coords2[:, 1], c='red', label='adata2', alpha=0.5, s=5)
 for cell_Idx, cell_coord in enumerate(coords1):
-    neighours_fig.annotate(cell_Idx, (cell_coord[0], cell_coord[1]), fontsize=8)
+    neighours_fig.annotate(cell_Idx, (cell_coord[0], cell_coord[1]), fontsize=4)
 
 
 def dot_product_euclidean_distance(coords1, coords2):
@@ -100,7 +100,7 @@ for idx, cell_id1 in enumerate(adata1.obs_names):
 
     # print result for the current cell
     logger.info(f"Idx: {idx}, Cell ID from adata1: {cell_id1}")
-    logger.info(f"Cells within {distance_threshold} units in adata2: \n {cell_ids_within_threshold}")
+    logger.info(f"Cells within {distance_threshold} units in adata2: \n")
 
     # Plot lines connecting the current cell to its neighbors and calculate distances
     for neighbour_idx in cell_neighbours:
@@ -110,10 +110,10 @@ for idx, cell_id1 in enumerate(adata1.obs_names):
         n_dimensional_distance = dot_product_euclidean_distance(cell_coords1, cell_coords2)
 
         # Add distance to distance matrix
-        distances_matrix[idx, neighbour_idx] = n_dimensional_distance
+        distances_matrix[idx, neighbour_idx] = n_dimensional_distance * 1000  # shift float to whole #, 3 precision
 
         # Plot match line
-        neighours_fig.plot([cell_coords1[0], cell_coords2[0]], [cell_coords1[1], cell_coords2[1]], 'k-', lw=0.25)
+        # neighours_fig.plot([cell_coords1[0], cell_coords2[0]], [cell_coords1[1], cell_coords2[1]], 'k-', lw=0.25)
 
         # print distance for verification
         logger.info(f"Distance from {cell_id1} to {adata2.obs_names[neighbour_idx]}: {n_dimensional_distance:.6f}")
@@ -124,13 +124,13 @@ for idx, cell_id1 in enumerate(adata1.obs_names):
 # for idx, cell_id1 in enumerate(adata1.obs_names):
 #     # Get index of the closest neighbor
 #     closest_neighbor_idx = np.argmin(distances_matrix[idx, :])
-#     if np.isfinite(distances_matrix[idx, closest_neighbor_idx]):
+#     if distances_matrix[idx, closest_neighbor_idx] != 2147483647:
 #         cell_coords1 = coords1[idx, :]
 #         cell_coords2 = coords2[closest_neighbor_idx, :]
 #
 #         # Plot red line for the closest neighbor
 #         neighours_fig.plot([cell_coords1[0], cell_coords2[0]], [cell_coords1[1], cell_coords2[1]], 'r-', lw=0.5)
-# #TODO: Add save to disk functionality
+# # TODO: Add save to disk functionality
 
 logger.info("Distances Matrix:")
 logger.info(distances_matrix)
@@ -146,19 +146,45 @@ for idx in range(len(adata1_match_idx)):
     cell_coords2 = coords2[adata2_match_idx[idx], :]
     neighours_fig.plot([cell_coords1[0], cell_coords2[0]], [cell_coords1[1], cell_coords2[1]], 'r-', lw=0.5)
 
-# Write matches to disk
-matches_array_length = max(len(adata1_match_idx), len(adata2_match_idx))
-with open('matches.txt', 'w') as file:
-    for idx in range(matches_array_length):
-        elem1 = adata1_match_idx[idx] if idx < len(adata1_match_idx) else None
-        elem2 = adata2_match_idx[idx] if idx < len(adata2_match_idx) else None
-        file.write(f"{elem1} {elem2}\n")
-
+# # Write matches to disk
+# matches_array_length = max(len(adata1_match_idx), len(adata2_match_idx))
+# with open('matches.txt', 'w') as file:
+#     for idx in range(matches_array_length):
+#         elem1 = adata1_match_idx[idx] if idx < len(adata1_match_idx) else None
+#         elem2 = adata2_match_idx[idx] if idx < len(adata2_match_idx) else None
+#         file.write(f"{elem1} {elem2}\n")
 
 # Add labels and legend
 neighours_fig.set_xlabel('X Coordinate')
 neighours_fig.set_ylabel('Y Coordinate')
 neighours_fig.legend()
+
+plt.show()
+
+################## UMAP Matching #################
+# UMAPs are already computed in main.py
+# Get UMAP coords
+umap1 = adata1.obsm['X_umap']
+umap2 = adata2.obsm['X_umap']
+
+# Plot the UMAP embeddings
+fig, umap_fig = plt.subplots(figsize=(10, 10), dpi=300)
+
+# Plot UMAP for adata1
+umap_fig.scatter(umap1[:, 0], umap1[:, 1], c='blue', label='adata1', alpha=0.5)
+# Plot UMAP for adata2
+umap_fig.scatter(umap2[:, 0], umap2[:, 1], c='red', label='adata2', alpha=0.5)
+
+# Draw lines between matched cells
+for idx in range(len(adata1_match_idx)):
+    umap_coords1 = umap1[adata1_match_idx[idx], :]
+    umap_coords2 = umap2[adata2_match_idx[idx], :]
+    umap_fig.plot([umap_coords1[0], umap_coords2[0]], [umap_coords1[1], umap_coords2[1]], 'r-', lw=0.5)
+
+# Add labels and legend
+umap_fig.set_xlabel('UMAP1')
+umap_fig.set_ylabel('UMAP2')
+umap_fig.legend()
 
 plt.show()
 

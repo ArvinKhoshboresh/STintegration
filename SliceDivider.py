@@ -2,8 +2,10 @@ import numpy as np
 import anndata
 import os
 
+os.chdir('C:\\Users\\arkho\\OneDrive\\Desktop')
+
 # Load AnnData object
-adata = anndata.read_h5ad("C:/Users/arkho/OneDrive/Desktop/adata3.h5ad")
+adata = anndata.read_h5ad("C:/Users/arkho/OneDrive/Desktop/Full set 1/pilot_adata_UMAPed_Spatialed.h5ad")
 
 # Check if 'X_spatial' is in adata.obsm and extract z coordinates
 if 'X_spatial' in adata.obsm:
@@ -15,7 +17,7 @@ else:
 
 # Define range for z coordinates and the step size
 z_min, z_max = np.min(z_coords), np.max(z_coords)
-step_size = 0.1
+step_size = (z_max - z_min) / 2
 
 output_dir = 'z_splits'
 os.makedirs(output_dir, exist_ok=True)
