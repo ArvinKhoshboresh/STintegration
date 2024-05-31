@@ -17,7 +17,8 @@ else:
 
 # Define range for z coordinates and the step size
 z_min, z_max = np.min(z_coords), np.max(z_coords)
-step_size = (z_max - z_min) / 2
+step_size = 0.1
+# step_size = (z_max - z_min) / 2
 
 output_dir = 'z_splits'
 os.makedirs(output_dir, exist_ok=True)
