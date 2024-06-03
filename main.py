@@ -30,7 +30,7 @@ print(adataFull.var.head())
 # Cut data into pieces for faster prototyping
 num_cells = adataFull.shape[0]
 indices = np.random.permutation(num_cells)
-split = indices[:num_cells // 20]
+split = indices[:num_cells // 15]
 adata = adataFull[split].copy()
 print('data split')
 
@@ -56,10 +56,10 @@ print(adata)
 
 # adata.write("C:/Users/arkho/OneDrive/Desktop/pilot_processed_adata.h5ad")
 
-# Plot UMAP
-with plt.rc_context({"figure.figsize": (12, 12), "figure.dpi": (500)}):
-    sc.pl.umap(adata, save='umap_plot.png')
-print('umap plotted')
+# # Plot UMAP
+# with plt.rc_context({"figure.figsize": (12, 12), "figure.dpi": (500)}):
+#     sc.pl.umap(adata, save='umap_plot.png')
+# print('umap plotted')
 
 ##################### SPATIAL MAPPING ##################
 
@@ -102,10 +102,10 @@ adata.obsm['X_spatial'] = spatial_coords[['x', 'y', 'z']].values
 print(adata.obsm['X_spatial'])
 print('calculation end')
 
-# Plot the spatial distribution with customizations
-with plt.rc_context({"figure.figsize": (12, 12), "figure.dpi": (500)}):
-    sc.pl.spatial(adata, spot_size=0.01, save='spatial_plot.png')
-print('spatial plotted')
+# # Plot the spatial distribution
+# with plt.rc_context({"figure.figsize": (12, 12), "figure.dpi": (500)}):
+#     sc.pl.spatial(adata, spot_size=0.01, save='spatial_plot.png')
+# print('spatial plotted')
 
 adata.write("C:/Users/arkho/OneDrive/Desktop/pilot_adata_UMAPed_Spatialed.h5ad")
 

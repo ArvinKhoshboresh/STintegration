@@ -15,8 +15,8 @@ logger = logging.getLogger('logger')
 logging.basicConfig(level=logging.INFO)
 
 # Load AnnData objects
-adata1 = sc.read_h5ad("C:/Users/arkho/OneDrive/Desktop/adata5.h5ad")
-adata2 = sc.read_h5ad("C:/Users/arkho/OneDrive/Desktop/adata6.h5ad")
+adata1 = sc.read_h5ad("C:/Users/arkho/OneDrive/Desktop/adata3.h5ad")
+adata2 = sc.read_h5ad("C:/Users/arkho/OneDrive/Desktop/adata4.h5ad")
 
 logger.info(adata1)
 logger.info(adata2)
@@ -83,8 +83,9 @@ for cell_Idx, cell_coord in enumerate(coords1):
 def dot_product_euclidean_distance(coords1, coords2):
     # Takes two cell coords in many dimensional space, returns Euclidean distance approximated by dot product of
     # difference vector
-    difference_vector = coords1 - coords2
-    return np.sqrt(np.dot(difference_vector, difference_vector))
+    difference_vectors = coords1 - coords2
+    print(difference_vectors)
+    return np.sqrt(np.dot(difference_vectors, difference_vectors))
 
 
 # Iterate through all cells in adata1 and plot neighbors from adata2
@@ -95,9 +96,6 @@ for idx, cell_id1 in enumerate(adata1.obs_names):
     # Get indices of neighboring cells in adata2
     cell_neighbours = neighbour_indices[idx]
 
-    # Get the IDs of the cells within the threshold
-    cell_ids_within_threshold = adata2.obs_names[cell_neighbours]
-
     # print result for the current cell
     logger.info(f"Idx: {idx}, Cell ID from adata1: {cell_id1}")
     logger.info(f"Cells within {distance_threshold} units in adata2: \n")
@@ -107,6 +105,8 @@ for idx, cell_id1 in enumerate(adata1.obs_names):
         cell_coords2 = coords2[neighbour_idx, :]
 
         # Calculate distance
+        print(cell_coords1)
+        print(cell_coords2)
         n_dimensional_distance = dot_product_euclidean_distance(cell_coords1, cell_coords2)
 
         # Add distance to distance matrix
