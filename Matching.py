@@ -6,13 +6,14 @@ from scipy.spatial import KDTree
 from scipy.optimize import linear_sum_assignment
 import matplotlib.pyplot as plt
 import numpy as np
+import math
 
 start_time = time.time()
 
 os.chdir('C:\\Users\\arkho\\OneDrive\\Desktop')
 
 logger = logging.getLogger('logger')
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format='')
 
 # Load AnnData objects
 adata1 = sc.read_h5ad("C:/Users/arkho/OneDrive/Desktop/adata3.h5ad")
@@ -62,39 +63,65 @@ kdtree1 = KDTree(coords1)
 kdtree2 = KDTree(coords2)
 
 # Define distance threshold
-distance_threshold = 1
+distance_threshold = 0.6
 
 # Use query_ball_tree to find neighboring cells
 neighbour_indices = kdtree1.query_ball_tree(kdtree2, distance_threshold)
 
-# Create matrix to hold all adata1 cells and expression euclidean distance to each cell in adata2
-distances_matrix = np.full((coords1.shape[0], coords2.shape[0]), 2147483647)
+# Create matrix to hold all physical distances to each pair in adata2
+physical_distances = np.full((coords1.shape[0], coords2.shape[0]), 0)
+
+# Create matrix to hold all adata1 cells and expression Euclidean distance to each cell in adata2
+expression_distances = np.full((coords1.shape[0], coords2.shape[0]), 0)
 
 # Create plot
-fig, neighours_fig = plt.subplots(figsize=(15, 10), dpi=250)
+fig, neighours_fig = plt.subplots(figsize=(15, 10), dpi=350)
 
 # Plot all cells from both datasets
 neighours_fig.scatter(coords1[:, 0], coords1[:, 1], c='blue', label='adata1', alpha=0.5, s=5)
 neighours_fig.scatter(coords2[:, 0], coords2[:, 1], c='red', label='adata2', alpha=0.5, s=5)
-for cell_Idx, cell_coord in enumerate(coords1):
-    neighours_fig.annotate(cell_Idx, (cell_coord[0], cell_coord[1]), fontsize=4)
+# for cell_Idx, cell_coord in enumerate(coords1):
+#     neighours_fig.annotate(cell_Idx, (cell_coord[0], cell_coord[1]), fontsize=4)
+
+# Create matrix of gene expression x cells
+expression_matrix1 = adata1.X
+expression_matrix2 = adata2.X
 
 
 def dot_product_euclidean_distance(coords1, coords2):
-    # Takes two cell coords in many dimensional space, returns Euclidean distance approximated by dot product of
-    # difference vector
+    """
+    Takes two cell coords in many dimensional space, returns Euclidean distance approximated by dot product of
+    difference vector
+    """
+
     difference_vectors = coords1 - coords2
-    print(difference_vectors)
     return np.sqrt(np.dot(difference_vectors, difference_vectors))
+
+
+def weighted_distance(distance, scale):
+    """
+    Applies an exponential weighting-up to the input distance, asymptotically approaching the max_distance.
+    Scale adjusts the rate of growth.
+
+    Higher scale more gradually increases the weighted distance
+    Lower scale has less effect on lower distances, more effect on higher distances
+    """
+
+    # Apply exponential growth function
+    return distance_threshold * (1 - math.exp(-distance / (scale * distance_threshold)))
 
 
 # Iterate through all cells in adata1 and plot neighbors from adata2
 for idx, cell_id1 in enumerate(adata1.obs_names):
+
     # Get coordinates of the current cell
     cell_coords1 = coords1[idx, :]
 
     # Get indices of neighboring cells in adata2
     cell_neighbours = neighbour_indices[idx]
+
+    # Get vector representation of adata1 cell's gene expression
+    expression_vector1 = expression_matrix1[idx]
 
     # print result for the current cell
     logger.info(f"Idx: {idx}, Cell ID from adata1: {cell_id1}")
@@ -104,27 +131,45 @@ for idx, cell_id1 in enumerate(adata1.obs_names):
     for neighbour_idx in cell_neighbours:
         cell_coords2 = coords2[neighbour_idx, :]
 
-        # Calculate distance
-        print(cell_coords1)
-        print(cell_coords2)
-        n_dimensional_distance = dot_product_euclidean_distance(cell_coords1, cell_coords2)
+        # Calculate distance and weighted distance
+        weighted_physical_distance = weighted_distance(dot_product_euclidean_distance(cell_coords1, cell_coords2), 2)
+        weighted_physical_distance = weighted_physical_distance * 1000000  # Creates values broadly in the 6 figures
 
-        # Add distance to distance matrix
-        distances_matrix[idx, neighbour_idx] = n_dimensional_distance * 1000  # shift float to whole #, 3 precision
+        # Add distance to physical distance matrix
+        physical_distances[idx, neighbour_idx] = weighted_physical_distance
 
         # Plot match line
         # neighours_fig.plot([cell_coords1[0], cell_coords2[0]], [cell_coords1[1], cell_coords2[1]], 'k-', lw=0.25)
 
         # print distance for verification
-        logger.info(f"Distance from {cell_id1} to {adata2.obs_names[neighbour_idx]}: {n_dimensional_distance:.6f}")
-    logger.info('\n')
+        logger.info(f"Distance from {cell_id1} to {adata2.obs_names[neighbour_idx]}: {weighted_physical_distance:.6f}")
+
+        expression_vector2 = expression_matrix2[neighbour_idx]
+
+        expression_distance = dot_product_euclidean_distance(expression_vector1, expression_vector2)
+        expression_distances[idx, neighbour_idx] = expression_distance
+
+np.set_printoptions(threshold=1000)
+
+logger.info("Physical Matrix:")
+logger.info(physical_distances)
+
+logger.info("Expression Matrix:")
+logger.info(expression_distances)
+
+distances_matrix = np.add(physical_distances, expression_distances)
+distances_matrix[distances_matrix == 0] = 2147483647
+
+logger.info("Distances Matrix:")
+logger.info(distances_matrix)
+
 
 # ############### MULTIPLE MAPPING ALLOWED METHOD ################
 # # Draw red line for lowest expression Euclidean distance match
 # for idx, cell_id1 in enumerate(adata1.obs_names):
 #     # Get index of the closest neighbor
-#     closest_neighbor_idx = np.argmin(distances_matrix[idx, :])
-#     if distances_matrix[idx, closest_neighbor_idx] != 2147483647:
+#     closest_neighbor_idx = np.argmin(physical_distances[idx, :])
+#     if physical_distances[idx, closest_neighbor_idx] != 2147483647:
 #         cell_coords1 = coords1[idx, :]
 #         cell_coords2 = coords2[closest_neighbor_idx, :]
 #
@@ -132,10 +177,7 @@ for idx, cell_id1 in enumerate(adata1.obs_names):
 #         neighours_fig.plot([cell_coords1[0], cell_coords2[0]], [cell_coords1[1], cell_coords2[1]], 'r-', lw=0.5)
 # # TODO: Add save to disk functionality
 
-logger.info("Distances Matrix:")
-logger.info(distances_matrix)
-
-############## Linear sum assingment method (no multiple mapping allowed) ################
+#################### Linear sum assingment method (no multiple mapping allowed) ################
 adata1_match_idx, adata2_match_idx = linear_sum_assignment(distances_matrix)
 
 logger.info("Linear Sum Assignment solution:")
@@ -144,7 +186,7 @@ for idx in range(len(adata1_match_idx)):
     logger.info(f"{adata1_match_idx[idx]} {adata2_match_idx[idx]}")
     cell_coords1 = coords1[adata1_match_idx[idx], :]
     cell_coords2 = coords2[adata2_match_idx[idx], :]
-    neighours_fig.plot([cell_coords1[0], cell_coords2[0]], [cell_coords1[1], cell_coords2[1]], 'r-', lw=0.5)
+    neighours_fig.plot([cell_coords1[0], cell_coords2[0]], [cell_coords1[1], cell_coords2[1]], 'r-', lw=0.4)
 
 # # Write matches to disk
 # matches_array_length = max(len(adata1_match_idx), len(adata2_match_idx))
@@ -179,7 +221,7 @@ umap_fig.scatter(umap2[:, 0], umap2[:, 1], c='red', label='adata2', alpha=0.5)
 for idx in range(len(adata1_match_idx)):
     umap_coords1 = umap1[adata1_match_idx[idx], :]
     umap_coords2 = umap2[adata2_match_idx[idx], :]
-    umap_fig.plot([umap_coords1[0], umap_coords2[0]], [umap_coords1[1], umap_coords2[1]], 'r-', lw=0.5)
+    umap_fig.plot([umap_coords1[0], umap_coords2[0]], [umap_coords1[1], umap_coords2[1]], 'r-', lw=0.15)
 
 # Add labels and legend
 umap_fig.set_xlabel('UMAP1')
@@ -188,4 +230,4 @@ umap_fig.legend()
 
 plt.show()
 
-logger.info(f'Script took: {time.time()-start_time}')
+logger.info(f'Script took: {time.time() - start_time}')
