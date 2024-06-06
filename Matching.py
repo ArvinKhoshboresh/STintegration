@@ -7,17 +7,19 @@ from scipy.optimize import linear_sum_assignment
 import matplotlib.pyplot as plt
 import numpy as np
 import math
+import sys
 
 start_time = time.time()
-
-os.chdir('C:\\Users\\arkho\\OneDrive\\Desktop')
 
 logger = logging.getLogger('logger')
 logging.basicConfig(level=logging.INFO, format='')
 
 # Load AnnData objects
-adata1 = sc.read_h5ad("C:/Users/arkho/OneDrive/Desktop/adata3.h5ad")
-adata2 = sc.read_h5ad("C:/Users/arkho/OneDrive/Desktop/adata4.h5ad")
+adata1_path = sys.argv[1]
+adata2_path = sys.argv[2]
+
+adata1 = sc.read_h5ad(adata1_path)
+adata2 = sc.read_h5ad(adata2_path)
 
 logger.info(adata1)
 logger.info(adata2)
@@ -63,7 +65,7 @@ kdtree1 = KDTree(coords1)
 kdtree2 = KDTree(coords2)
 
 # Define distance threshold
-distance_threshold = 0.6
+distance_threshold = 0.3
 
 # Use query_ball_tree to find neighboring cells
 neighbour_indices = kdtree1.query_ball_tree(kdtree2, distance_threshold)
@@ -75,11 +77,11 @@ physical_distances = np.full((coords1.shape[0], coords2.shape[0]), 0)
 expression_distances = np.full((coords1.shape[0], coords2.shape[0]), 0)
 
 # Create plot
-fig, neighours_fig = plt.subplots(figsize=(15, 10), dpi=350)
+fig, neighours_fig = plt.subplots(figsize=(15, 10), dpi=450)
 
 # Plot all cells from both datasets
-neighours_fig.scatter(coords1[:, 0], coords1[:, 1], c='blue', label='adata1', alpha=0.5, s=5)
-neighours_fig.scatter(coords2[:, 0], coords2[:, 1], c='red', label='adata2', alpha=0.5, s=5)
+neighours_fig.scatter(coords1[:, 0], coords1[:, 1], c='blue', label='adata1', alpha=0.5, s=2)
+neighours_fig.scatter(coords2[:, 0], coords2[:, 1], c='red', label='adata2', alpha=0.5, s=2)
 # for cell_Idx, cell_coord in enumerate(coords1):
 #     neighours_fig.annotate(cell_Idx, (cell_coord[0], cell_coord[1]), fontsize=4)
 
@@ -183,25 +185,30 @@ adata1_match_idx, adata2_match_idx = linear_sum_assignment(distances_matrix)
 logger.info("Linear Sum Assignment solution:")
 
 for idx in range(len(adata1_match_idx)):
-    logger.info(f"{adata1_match_idx[idx]} {adata2_match_idx[idx]}")
-    cell_coords1 = coords1[adata1_match_idx[idx], :]
-    cell_coords2 = coords2[adata2_match_idx[idx], :]
-    neighours_fig.plot([cell_coords1[0], cell_coords2[0]], [cell_coords1[1], cell_coords2[1]], 'r-', lw=0.4)
+    if physical_distances[adata1_match_idx[idx], adata2_match_idx[idx]] <= distance_threshold:
+        cell_coords1 = coords1[adata1_match_idx[idx], :]
+        cell_coords2 = coords2[adata2_match_idx[idx], :]
+        neighours_fig.plot([cell_coords1[0], cell_coords2[0]], [cell_coords1[1], cell_coords2[1]], 'r-', lw=0.1)
+        logger.info(f"{adata1_match_idx[idx]} {adata2_match_idx[idx]}")
+    else:
+        adata1_match_idx.pop(idx)
+        adata2_match_idx.pop(idx)
 
-# # Write matches to disk
-# matches_array_length = max(len(adata1_match_idx), len(adata2_match_idx))
-# with open('matches.txt', 'w') as file:
-#     for idx in range(matches_array_length):
-#         elem1 = adata1_match_idx[idx] if idx < len(adata1_match_idx) else None
-#         elem2 = adata2_match_idx[idx] if idx < len(adata2_match_idx) else None
-#         file.write(f"{elem1} {elem2}\n")
+
+# Write matches to disk
+matches_array_length = max(len(adata1_match_idx), len(adata2_match_idx))
+with open('matches.txt', 'w') as file:
+    for idx in range(matches_array_length):
+        elem1 = adata1_match_idx[idx] if idx < len(adata1_match_idx) else None
+        elem2 = adata2_match_idx[idx] if idx < len(adata2_match_idx) else None
+        file.write(f"{elem1} {elem2}\n")
 
 # Add labels and legend
 neighours_fig.set_xlabel('X Coordinate')
 neighours_fig.set_ylabel('Y Coordinate')
 neighours_fig.legend()
 
-plt.show()
+plt.savefig('matches.png', bbox_inches='tight')
 
 ################## UMAP Matching #################
 # UMAPs are already computed in main.py
@@ -210,24 +217,24 @@ umap1 = adata1.obsm['X_umap']
 umap2 = adata2.obsm['X_umap']
 
 # Plot the UMAP embeddings
-fig, umap_fig = plt.subplots(figsize=(10, 10), dpi=300)
+fig, umap_fig = plt.subplots(figsize=(10, 10), dpi=450)
 
 # Plot UMAP for adata1
-umap_fig.scatter(umap1[:, 0], umap1[:, 1], c='blue', label='adata1', alpha=0.5)
+umap_fig.scatter(umap1[:, 0], umap1[:, 1], c='blue', label='adata1', alpha=0.5, s=2)
 # Plot UMAP for adata2
-umap_fig.scatter(umap2[:, 0], umap2[:, 1], c='red', label='adata2', alpha=0.5)
+umap_fig.scatter(umap2[:, 0], umap2[:, 1], c='red', label='adata2', alpha=0.5, s=2)
 
 # Draw lines between matched cells
 for idx in range(len(adata1_match_idx)):
     umap_coords1 = umap1[adata1_match_idx[idx], :]
     umap_coords2 = umap2[adata2_match_idx[idx], :]
-    umap_fig.plot([umap_coords1[0], umap_coords2[0]], [umap_coords1[1], umap_coords2[1]], 'r-', lw=0.15)
+    umap_fig.plot([umap_coords1[0], umap_coords2[0]], [umap_coords1[1], umap_coords2[1]], 'r-', lw=0.1)
 
 # Add labels and legend
 umap_fig.set_xlabel('UMAP1')
 umap_fig.set_ylabel('UMAP2')
 umap_fig.legend()
 
-plt.show()
+plt.savefig('umap.png', bbox_inches='tight')
 
 logger.info(f'Script took: {time.time() - start_time}')

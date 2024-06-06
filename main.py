@@ -3,11 +3,11 @@ import numpy as np
 import pandas as pd
 import os
 import matplotlib.pyplot as plt
-
-os.chdir('C:\\Users\\arkho\\OneDrive\\Desktop')
+import sys
 
 # Load the MERFISH data from an h5ad file
-adataFull = sc.read_h5ad("C:/Users/arkho/OneDrive/Desktop/Zhuang-ABCA-4-log2.h5ad")
+h5ad_path = sys.argv[1]
+adataFull = sc.read_h5ad(h5ad_path)
 print('data loaded')
 print(adataFull)
 
@@ -27,14 +27,14 @@ print(adataFull.obs.head())
 print("Gene metadata (.var):")
 print(adataFull.var.head())
 
-# Cut data into pieces for faster prototyping
-num_cells = adataFull.shape[0]
-indices = np.random.permutation(num_cells)
-split = indices[:num_cells // 15]
-adata = adataFull[split].copy()
-print('data split')
+# # Cut data into pieces for faster prototyping
+# num_cells = adataFull.shape[0]
+# indices = np.random.permutation(num_cells)
+# split = indices[:num_cells // 15]
+# adata = adataFull[split].copy()
+# print('data split')
 
-# adata = adataFull.copy()
+adata = adataFull.copy()
 
 # Preprocess the data: Normalize and log-transform if needed
 sc.pp.normalize_total(adata, target_sum=1e6, exclude_highly_expressed=True, inplace=True)
@@ -66,7 +66,8 @@ print(adata)
 print('started spatial mapping')
 
 # Load spatial coordinates from the CSV file
-spatial_coords = pd.read_csv("C:/Users/arkho/OneDrive/Desktop/ccf_coordinates.csv")
+coords_path = sys.argv[2]
+spatial_coords = pd.read_csv(coords_path)
 
 # Ensure the indices match between the spatial coordinates and adata
 spatial_coords.set_index('cell_label', inplace=True)
@@ -107,6 +108,6 @@ print('calculation end')
 #     sc.pl.spatial(adata, spot_size=0.01, save='spatial_plot.png')
 # print('spatial plotted')
 
-adata.write("C:/Users/arkho/OneDrive/Desktop/pilot_adata_UMAPed_Spatialed.h5ad")
+adata.write("pilot_adata_UMAPed_Spatialed.h5ad")
 
 print('script ended')
