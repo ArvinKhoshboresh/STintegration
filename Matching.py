@@ -71,17 +71,17 @@ distance_threshold = 0.3
 neighbour_indices = kdtree1.query_ball_tree(kdtree2, distance_threshold)
 
 # Create matrix to hold all physical distances to each pair in adata2
-physical_distances = np.full((coords1.shape[0], coords2.shape[0]), 0)
+physical_distances = np.full((coords1.shape[0], coords2.shape[0]), fill_value=0, dtype=np.uint16)
 
 # Create matrix to hold all adata1 cells and expression Euclidean distance to each cell in adata2
-expression_distances = np.full((coords1.shape[0], coords2.shape[0]), 0)
+expression_distances = np.full((coords1.shape[0], coords2.shape[0]), fill_value=0, dtype=np.uint16)
 
 # Create plot
-fig, neighours_fig = plt.subplots(figsize=(15, 10), dpi=450)
+fig, neighours_fig = plt.subplots(figsize=(15, 10), dpi=500)
 
 # Plot all cells from both datasets
-neighours_fig.scatter(coords1[:, 0], coords1[:, 1], c='blue', label='adata1', alpha=0.5, s=2)
-neighours_fig.scatter(coords2[:, 0], coords2[:, 1], c='red', label='adata2', alpha=0.5, s=2)
+neighours_fig.scatter(coords1[:, 0], coords1[:, 1], c='blue', label='adata1', alpha=0.5, s=1)
+neighours_fig.scatter(coords2[:, 0], coords2[:, 1], c='red', label='adata2', alpha=0.5, s=1)
 # for cell_Idx, cell_coord in enumerate(coords1):
 #     neighours_fig.annotate(cell_Idx, (cell_coord[0], cell_coord[1]), fontsize=4)
 
@@ -135,7 +135,7 @@ for idx, cell_id1 in enumerate(adata1.obs_names):
 
         # Calculate distance and weighted distance
         weighted_physical_distance = weighted_distance(dot_product_euclidean_distance(cell_coords1, cell_coords2), 2)
-        weighted_physical_distance = weighted_physical_distance * 1000000  # Creates values broadly in the 6 figures
+        weighted_physical_distance = weighted_physical_distance * 1000  # Creates values broadly in the 3 figures
 
         # Add distance to physical distance matrix
         physical_distances[idx, neighbour_idx] = weighted_physical_distance
@@ -149,7 +149,7 @@ for idx, cell_id1 in enumerate(adata1.obs_names):
         expression_vector2 = expression_matrix2[neighbour_idx]
 
         expression_distance = dot_product_euclidean_distance(expression_vector1, expression_vector2)
-        expression_distances[idx, neighbour_idx] = expression_distance
+        expression_distances[idx, neighbour_idx] = expression_distance / 1000  # Creates values broadly in the 3 figures
 
 np.set_printoptions(threshold=1000)
 
@@ -160,7 +160,7 @@ logger.info("Expression Matrix:")
 logger.info(expression_distances)
 
 distances_matrix = np.add(physical_distances, expression_distances)
-distances_matrix[distances_matrix == 0] = 2147483647
+distances_matrix[distances_matrix == 0] = 65535
 
 logger.info("Distances Matrix:")
 logger.info(distances_matrix)
@@ -188,7 +188,7 @@ for idx in range(len(adata1_match_idx)):
     if physical_distances[adata1_match_idx[idx], adata2_match_idx[idx]] <= distance_threshold:
         cell_coords1 = coords1[adata1_match_idx[idx], :]
         cell_coords2 = coords2[adata2_match_idx[idx], :]
-        neighours_fig.plot([cell_coords1[0], cell_coords2[0]], [cell_coords1[1], cell_coords2[1]], 'r-', lw=0.1)
+        neighours_fig.plot([cell_coords1[0], cell_coords2[0]], [cell_coords1[1], cell_coords2[1]], 'r-', lw=0.05)
         logger.info(f"{adata1_match_idx[idx]} {adata2_match_idx[idx]}")
     else:
         adata1_match_idx.pop(idx)
@@ -217,18 +217,18 @@ umap1 = adata1.obsm['X_umap']
 umap2 = adata2.obsm['X_umap']
 
 # Plot the UMAP embeddings
-fig, umap_fig = plt.subplots(figsize=(10, 10), dpi=450)
+fig, umap_fig = plt.subplots(figsize=(10, 10), dpi=500)
 
 # Plot UMAP for adata1
-umap_fig.scatter(umap1[:, 0], umap1[:, 1], c='blue', label='adata1', alpha=0.5, s=2)
+umap_fig.scatter(umap1[:, 0], umap1[:, 1], c='blue', label='adata1', alpha=0.5, s=1)
 # Plot UMAP for adata2
-umap_fig.scatter(umap2[:, 0], umap2[:, 1], c='red', label='adata2', alpha=0.5, s=2)
+umap_fig.scatter(umap2[:, 0], umap2[:, 1], c='red', label='adata2', alpha=0.5, s=1)
 
 # Draw lines between matched cells
 for idx in range(len(adata1_match_idx)):
     umap_coords1 = umap1[adata1_match_idx[idx], :]
     umap_coords2 = umap2[adata2_match_idx[idx], :]
-    umap_fig.plot([umap_coords1[0], umap_coords2[0]], [umap_coords1[1], umap_coords2[1]], 'r-', lw=0.1)
+    umap_fig.plot([umap_coords1[0], umap_coords2[0]], [umap_coords1[1], umap_coords2[1]], 'r-', lw=0.05)
 
 # Add labels and legend
 umap_fig.set_xlabel('UMAP1')

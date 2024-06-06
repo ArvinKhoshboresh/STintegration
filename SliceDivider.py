@@ -1,11 +1,11 @@
 import numpy as np
 import anndata
 import os
-
-os.chdir('C:\\Users\\arkho\\OneDrive\\Desktop')
+import sys
 
 # Load AnnData object
-adata = anndata.read_h5ad("C:/Users/arkho/OneDrive/Desktop/Full set 1/pilot_adata_UMAPed_Spatialed.h5ad")
+adata_path = sys.argv[1]
+adata = anndata.read_h5ad(adata_path)
 
 # Check if 'X_spatial' is in adata.obsm and extract z coordinates
 if 'X_spatial' in adata.obsm:

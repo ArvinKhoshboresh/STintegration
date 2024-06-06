@@ -27,14 +27,14 @@ print(adataFull.obs.head())
 print("Gene metadata (.var):")
 print(adataFull.var.head())
 
-# # Cut data into pieces for faster prototyping
-# num_cells = adataFull.shape[0]
-# indices = np.random.permutation(num_cells)
-# split = indices[:num_cells // 15]
-# adata = adataFull[split].copy()
-# print('data split')
+# Cut data into pieces for faster prototyping
+num_cells = adataFull.shape[0]
+indices = np.random.permutation(num_cells)
+split = indices[:num_cells // 4]
+adata = adataFull[split].copy()
+print('data split')
 
-adata = adataFull.copy()
+# adata = adataFull.copy()
 
 # Preprocess the data: Normalize and log-transform if needed
 sc.pp.normalize_total(adata, target_sum=1e6, exclude_highly_expressed=True, inplace=True)
