@@ -27,29 +27,35 @@ class NonZeroSparseMatrix:
 
     def __getitem__(self, indices):
         row, col = indices
-        try:
-            return self.sparse_matrix[row, col] if (row, col) in zip(self.sparse_matrix.row,
-                                                                     self.sparse_matrix.col) else self.default_value
-        except AttributeError:  # Handle formats other than COO
-            if row < self.sparse_matrix.shape[0] and col < self.sparse_matrix.shape[1]:
-                return self.sparse_matrix[row, col] if self.sparse_matrix[row, col] != 0 else self.default_value
+        if isinstance(self.sparse_matrix, coo_matrix):
+            # Check if the element exists in the COO matrix
+            mask = (self.sparse_matrix.row == row) & (self.sparse_matrix.col == col)
+            if np.any(mask):
+                return self.sparse_matrix.data[mask][0]
             else:
-                raise IndexError("Index out of bounds")
+                return self.default_value
+        else:
+            # For other formats (CSR, CSC), use the built-in get method
+            value = self.sparse_matrix[row, col]
+            return value if value != 0 else self.default_value
 
     # No idea if this works
     def __setitem__(self, indices, value):
         row, col = indices
         if value != self.default_value:
             if isinstance(self.sparse_matrix, coo_matrix):
+                # Add the new value to the COO matrix
                 self.sparse_matrix = coo_matrix(
                     (np.append(self.sparse_matrix.data, value),
                      (np.append(self.sparse_matrix.row, row),
                       np.append(self.sparse_matrix.col, col))),
                     shape=self.sparse_matrix.shape)
             else:
+                # Set the value in other formats
                 self.sparse_matrix[row, col] = value
         else:
             if isinstance(self.sparse_matrix, coo_matrix):
+                # Remove the element from the COO matrix if it exists
                 mask = ~((self.sparse_matrix.row == row) & (self.sparse_matrix.col == col))
                 self.sparse_matrix = coo_matrix(
                     (self.sparse_matrix.data[mask],
@@ -57,13 +63,14 @@ class NonZeroSparseMatrix:
                       self.sparse_matrix.col[mask])),
                     shape=self.sparse_matrix.shape)
             else:
+                # Set the value to zero in other formats
                 self.sparse_matrix[row, col] = 0
 
-    # def __str__(self):
-    #     dense_repr = np.full(self.sparse_matrix.shape, self.default_value)
-    #     if isinstance(self.sparse_matrix, coo_matrix):
-    #         for r, c, v in zip(self.sparse_matrix.row, self.sparse_matrix.col, self.sparse_matrix.data):
-    #             dense_repr[r, c] = v
-    #     else:
-    #         dense_repr += self.sparse_matrix.toarray()
-    #     return str(dense_repr)
+    def __str__(self):
+        dense_repr = np.full(self.sparse_matrix.shape, self.default_value)
+        if isinstance(self.sparse_matrix, coo_matrix):
+            for r, c, v in zip(self.sparse_matrix.row, self.sparse_matrix.col, self.sparse_matrix.data):
+                dense_repr[r, c] = v
+        else:
+            dense_repr += self.sparse_matrix.toarray()
+        return str(dense_repr)
