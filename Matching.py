@@ -4,10 +4,12 @@ import scanpy as sc
 import logging
 from scipy.spatial import KDTree
 from scipy.optimize import linear_sum_assignment
+from scipy.sparse.csgraph import min_weight_full_bipartite_matching
 import matplotlib.pyplot as plt
 import numpy as np
 import math
 import sys
+import NonZeroSparseMatrix
 
 start_time = time.time()
 
@@ -70,11 +72,9 @@ distance_threshold = 0.3
 # Use query_ball_tree to find neighboring cells
 neighbour_indices = kdtree1.query_ball_tree(kdtree2, distance_threshold)
 
-# Create matrix to hold all physical distances to each pair in adata2
-physical_distances = np.full((coords1.shape[0], coords2.shape[0]), fill_value=0, dtype=np.uint16)
-
-# Create matrix to hold all adata1 cells and expression Euclidean distance to each cell in adata2
-expression_distances = np.full((coords1.shape[0], coords2.shape[0]), fill_value=0, dtype=np.uint16)
+# Create matrix to hold all distances to each pair in adata2
+# distances_matrix = np.full((coords1.shape[0], coords2.shape[0]), fill_value=0, dtype=np.uint16)
+distances_matrix = NonZeroSparseMatrix.NonZeroSparseMatrix(65535, shape=(coords1.shape[0], coords2.shape[0]))
 
 # Create plot
 fig, neighours_fig = plt.subplots(figsize=(15, 10), dpi=500)
@@ -138,7 +138,7 @@ for idx, cell_id1 in enumerate(adata1.obs_names):
         weighted_physical_distance = weighted_physical_distance * 1000  # Creates values broadly in the 3 figures
 
         # Add distance to physical distance matrix
-        physical_distances[idx, neighbour_idx] = weighted_physical_distance
+        distances_matrix[idx, neighbour_idx] = weighted_physical_distance
 
         # Plot match line
         # neighours_fig.plot([cell_coords1[0], cell_coords2[0]], [cell_coords1[1], cell_coords2[1]], 'k-', lw=0.25)
@@ -146,21 +146,14 @@ for idx, cell_id1 in enumerate(adata1.obs_names):
         # print distance for verification
         logger.info(f"Distance from {cell_id1} to {adata2.obs_names[neighbour_idx]}: {weighted_physical_distance:.6f}")
 
+        # Get match expression vector
         expression_vector2 = expression_matrix2[neighbour_idx]
 
         expression_distance = dot_product_euclidean_distance(expression_vector1, expression_vector2)
-        expression_distances[idx, neighbour_idx] = expression_distance / 1000  # Creates values broadly in the 3 figures
+        distances_matrix[idx, neighbour_idx] = ((np.add(distances_matrix[idx, neighbour_idx], expression_distance))
+                                                / 1000)  # Creates values broadly in the 3 figures
 
 np.set_printoptions(threshold=1000)
-
-logger.info("Physical Matrix:")
-logger.info(physical_distances)
-
-logger.info("Expression Matrix:")
-logger.info(expression_distances)
-
-distances_matrix = np.add(physical_distances, expression_distances)
-distances_matrix[distances_matrix == 0] = 65535
 
 logger.info("Distances Matrix:")
 logger.info(distances_matrix)
@@ -180,12 +173,14 @@ logger.info(distances_matrix)
 # # TODO: Add save to disk functionality
 
 #################### Linear sum assingment method (no multiple mapping allowed) ################
-adata1_match_idx, adata2_match_idx = linear_sum_assignment(distances_matrix)
+# adata1_match_idx, adata2_match_idx = linear_sum_assignment(distances_matrix)
+adata1_match_idx, adata2_match_idx = min_weight_full_bipartite_matching(distances_matrix)
 
 logger.info("Linear Sum Assignment solution:")
 
 for idx in range(len(adata1_match_idx)):
-    if physical_distances[adata1_match_idx[idx], adata2_match_idx[idx]] <= distance_threshold:
+    # if physical_distances[adata1_match_idx[idx], adata2_match_idx[idx]] <= distance_threshold:
+    if dot_product_euclidean_distance(coords1[adata1_match_idx[idx]], coords2[adata2_match_idx[idx]]) <= distance_threshold:
         cell_coords1 = coords1[adata1_match_idx[idx], :]
         cell_coords2 = coords2[adata2_match_idx[idx], :]
         neighours_fig.plot([cell_coords1[0], cell_coords2[0]], [cell_coords1[1], cell_coords2[1]], 'r-', lw=0.05)
