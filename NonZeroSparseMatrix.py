@@ -1,76 +1,29 @@
-import numpy as np
-from scipy.sparse import coo_matrix, csr_matrix, csc_matrix
+from scipy.sparse import csr_matrix
 
 
 class NonZeroSparseMatrix:
-    # Wrapper for sparse matrices to store sparse values while returning some default value instead of zero for
-    # non-stored indices
-    # Takes some default value to return instead of zero, an existing matrix, or shape to create new matrix
-
-    def __init__(self, default_value, sparse_matrix=None, shape=None):
+    def __init__(self, matrix, default_value=0):
+        if not isinstance(matrix, csr_matrix):
+            raise ValueError("matrix must be an instance of scipy.sparse.csr_matrix")
+        self.matrix = matrix
         self.default_value = default_value
-        if sparse_matrix is not None:
-            self.sparse_matrix = sparse_matrix
-        elif shape is not None:
-            self.sparse_matrix = coo_matrix(shape)
-        else:
-            raise ValueError("Must provide either a sparse_matrix or a shape")
+
+    def __getitem__(self, index):
+        value = self.matrix[index]
+        # if isinstance(value, csr_matrix.__class__):  # Handle slicing cases
+        #     return value
+        if value == 0:
+            return self.default_value
+        return value
+
+    def __setitem__(self, index, value):
+        self.matrix[index] = value
+
+    def toarray(self):
+        # Doesn't work if done with too large array as it would need too much RAM
+        arr = self.matrix.toarray()
+        arr[arr == 0] = self.default_value
+        return arr
 
     def to_csr(self):
-        return self.sparse_matrix.tocsr()
-
-    def to_csc(self):
-        return self.sparse_matrix.tocsc()
-
-    def to_coo(self):
-        return self.sparse_matrix.tocoo()
-
-    def __getitem__(self, indices):
-        row, col = indices
-        if isinstance(self.sparse_matrix, coo_matrix):
-            # Check if the element exists in the COO matrix
-            mask = (self.sparse_matrix.row == row) & (self.sparse_matrix.col == col)
-            if np.any(mask):
-                return self.sparse_matrix.data[mask][0]
-            else:
-                return self.default_value
-        else:
-            # For other formats (CSR, CSC), use the built-in get method
-            value = self.sparse_matrix[row, col]
-            return value if value != 0 else self.default_value
-
-    # No idea if this works
-    def __setitem__(self, indices, value):
-        row, col = indices
-        if value != self.default_value:
-            if isinstance(self.sparse_matrix, coo_matrix):
-                # Add the new value to the COO matrix
-                self.sparse_matrix = coo_matrix(
-                    (np.append(self.sparse_matrix.data, value),
-                     (np.append(self.sparse_matrix.row, row),
-                      np.append(self.sparse_matrix.col, col))),
-                    shape=self.sparse_matrix.shape)
-            else:
-                # Set the value in other formats
-                self.sparse_matrix[row, col] = value
-        else:
-            if isinstance(self.sparse_matrix, coo_matrix):
-                # Remove the element from the COO matrix if it exists
-                mask = ~((self.sparse_matrix.row == row) & (self.sparse_matrix.col == col))
-                self.sparse_matrix = coo_matrix(
-                    (self.sparse_matrix.data[mask],
-                     (self.sparse_matrix.row[mask],
-                      self.sparse_matrix.col[mask])),
-                    shape=self.sparse_matrix.shape)
-            else:
-                # Set the value to zero in other formats
-                self.sparse_matrix[row, col] = 0
-
-    def __str__(self):
-        dense_repr = np.full(self.sparse_matrix.shape, self.default_value)
-        if isinstance(self.sparse_matrix, coo_matrix):
-            for r, c, v in zip(self.sparse_matrix.row, self.sparse_matrix.col, self.sparse_matrix.data):
-                dense_repr[r, c] = v
-        else:
-            dense_repr += self.sparse_matrix.toarray()
-        return str(dense_repr)
+        return self.matrix

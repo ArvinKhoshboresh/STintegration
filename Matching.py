@@ -5,11 +5,14 @@ import logging
 from scipy.spatial import KDTree
 from scipy.optimize import linear_sum_assignment
 from scipy.sparse.csgraph import min_weight_full_bipartite_matching
+from scipy.sparse import csr_matrix
 import matplotlib.pyplot as plt
 import numpy as np
 import math
 import sys
-import NonZeroSparseMatrix
+import NonZeroSparseMatrix as nzsm
+import concurrent.futures
+import threading
 
 start_time = time.time()
 
@@ -67,14 +70,14 @@ kdtree1 = KDTree(coords1)
 kdtree2 = KDTree(coords2)
 
 # Define distance threshold
-distance_threshold = 0.3
+distance_threshold = 0.2
 
 # Use query_ball_tree to find neighboring cells
 neighbour_indices = kdtree1.query_ball_tree(kdtree2, distance_threshold)
 
 # Create matrix to hold all distances to each pair in adata2
-# distances_matrix = np.full((coords1.shape[0], coords2.shape[0]), fill_value=0, dtype=np.uint16)
-distances_matrix = NonZeroSparseMatrix.NonZeroSparseMatrix(65535, shape=(coords1.shape[0], coords2.shape[0]))
+base_matrix = csr_matrix((len(coords1), len(coords2)), dtype=np.uint16)
+distances_matrix = nzsm.NonZeroSparseMatrix(base_matrix, 65535)
 
 # Create plot
 fig, neighours_fig = plt.subplots(figsize=(15, 10), dpi=500)
@@ -113,6 +116,56 @@ def weighted_distance(distance, scale):
     return distance_threshold * (1 - math.exp(-distance / (scale * distance_threshold)))
 
 
+# ############## MULTI PROCESS NEIGHBOUR CALCULATION ###############
+# def calculate_neighbour_distances(idx):
+#     # Get coordinates of the current cell
+#     cell_coords1 = coords1[idx, :]
+#
+#     # Get indices of neighboring cells in adata2
+#     cell_neighbours = neighbour_indices[idx]
+#
+#     # Get vector representation of adata1 cell's gene expression
+#     expression_vector1 = expression_matrix1[idx]
+#
+#     # print result for the current cell
+#     logger.info(f"Idx: {idx}, Cell ID from adata1: {adata1.obs_namescell_id1}")
+#     logger.info(f"Cells within {distance_threshold} units in adata2: \n")
+#
+#     # Plot lines connecting the current cell to its neighbors and calculate distances
+#     for neighbour_idx in cell_neighbours:
+#         cell_coords2 = coords2[neighbour_idx, :]
+#
+#         # Calculate distance and weighted distance
+#         weighted_physical_distance = weighted_distance(dot_product_euclidean_distance(cell_coords1, cell_coords2), 2)
+#         weighted_physical_distance = weighted_physical_distance * 1000  # Creates values broadly in the 3 figures
+#
+#         # Add distance to physical distance matrix
+#         distances_matrix[idx, neighbour_idx] = weighted_physical_distance
+#
+#         # Plot match line
+#         # neighours_fig.plot([cell_coords1[0], cell_coords2[0]], [cell_coords1[1], cell_coords2[1]], 'k-', lw=0.25)
+#
+#         # print distance for verification
+#         logger.info(f"Distance from {adata1.obs_names[idx]} to {adata2.obs_names[neighbour_idx]}: "
+#                     f"{weighted_physical_distance:.6f}")
+#
+#         # Get match expression vector
+#         expression_vector2 = expression_matrix2[neighbour_idx]
+#
+#         expression_distance = dot_product_euclidean_distance(expression_vector1, expression_vector2)
+#         distances_matrix[idx, neighbour_idx] = ((np.add(distances_matrix[idx, neighbour_idx], expression_distance))
+#                                                 / 1000)  # Creates values broadly in the 3 figures
+#
+#
+# distances_matrix = distances_matrix.to_csr()
+#
+# # Parallelized loop to calculate neighbour distances
+# with concurrent.futures.ProcessPoolExecutor(max_workers=16) as executor:
+#     futures = {executor.submit(calculate_neighbour_distances, idx): idx for idx in range(len(adata1))}
+#
+# concurrent.futures.wait(futures)
+
+##################### SINGLE THREADED NEIGHBOURS CALCULATION #########################
 # Iterate through all cells in adata1 and plot neighbors from adata2
 for idx, cell_id1 in enumerate(adata1.obs_names):
 
@@ -153,11 +206,10 @@ for idx, cell_id1 in enumerate(adata1.obs_names):
         distances_matrix[idx, neighbour_idx] = ((np.add(distances_matrix[idx, neighbour_idx], expression_distance))
                                                 / 1000)  # Creates values broadly in the 3 figures
 
-np.set_printoptions(threshold=1000)
+np.set_printoptions(threshold=np.inf)
 
 logger.info("Distances Matrix:")
 logger.info(distances_matrix)
-
 
 # ############### MULTIPLE MAPPING ALLOWED METHOD ################
 # # Draw red line for lowest expression Euclidean distance match
@@ -172,15 +224,13 @@ logger.info(distances_matrix)
 #         neighours_fig.plot([cell_coords1[0], cell_coords2[0]], [cell_coords1[1], cell_coords2[1]], 'r-', lw=0.5)
 # # TODO: Add save to disk functionality
 
-#################### Linear sum assingment method (no multiple mapping allowed) ################
-# adata1_match_idx, adata2_match_idx = linear_sum_assignment(distances_matrix)
+################# Linear sum assingment method (no multiple mapping allowed) ################
+logger.info("Finding best matches...")
 adata1_match_idx, adata2_match_idx = min_weight_full_bipartite_matching(distances_matrix)
-
 logger.info("Linear Sum Assignment solution:")
-
 for idx in range(len(adata1_match_idx)):
-    # if physical_distances[adata1_match_idx[idx], adata2_match_idx[idx]] <= distance_threshold:
-    if dot_product_euclidean_distance(coords1[adata1_match_idx[idx]], coords2[adata2_match_idx[idx]]) <= distance_threshold:
+    if dot_product_euclidean_distance(coords1[adata1_match_idx[idx]],
+                                      coords2[adata2_match_idx[idx]]) <= distance_threshold:
         cell_coords1 = coords1[adata1_match_idx[idx], :]
         cell_coords2 = coords2[adata2_match_idx[idx], :]
         neighours_fig.plot([cell_coords1[0], cell_coords2[0]], [cell_coords1[1], cell_coords2[1]], 'r-', lw=0.05)
@@ -188,7 +238,6 @@ for idx in range(len(adata1_match_idx)):
     else:
         adata1_match_idx.pop(idx)
         adata2_match_idx.pop(idx)
-
 
 # Write matches to disk
 matches_array_length = max(len(adata1_match_idx), len(adata2_match_idx))
