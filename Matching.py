@@ -65,8 +65,10 @@ coords2 = adata2.obsm['X_spatial']
 kdtree1 = KDTree(coords1)
 kdtree2 = KDTree(coords2)
 
-# Define distance threshold
-distance_threshold = 0.2
+# Define constants
+distance_threshold = 0.2  # In CCF units
+available_memory = 60000000000  # In bytes, gets padded by 10%. 60GB
+available_memory = available_memory * 0.9
 
 # Use query_ball_tree to find neighboring cells
 neighbour_indices = kdtree1.query_ball_tree(kdtree2, distance_threshold)
@@ -85,8 +87,7 @@ expression_matrix1 = adata1.X
 expression_matrix2 = adata2.X
 
 # Create matrix to hold all distances to each pair in adata2
-expression_distances = csr_matrix((len(coords1), len(coords2)), dtype=np.int32)
-physical_distances = expression_distances.copy()
+distances_matrix = csr_matrix((len(coords1), len(coords2)), dtype=np.int32)
 
 
 def dot_product_euclidean_distance(coords1, coords2):
@@ -114,7 +115,49 @@ def weighted_distance(distance, scale):
 
 # Calculate physical distances for all cell pairs
 
+# Equalize matrix shape
+max_rows = min(coords1.shape[0], coords2.shape[0])
+max_columns = min(coords1.shape[1], coords2.shape[1]) # Does not test for differing gene panels. Dont use this it sucks
 
+sliced_coords1 = coords1[:max_rows, :]
+sliced_coords2 = coords2[:max_rows, :]
+
+sliced_expression1 = expression_matrix1[:max_rows, :]
+sliced_expression2 = expression_matrix2[:max_rows, :]
+
+# TODO: Stream dot product results into a sparse matrix
+
+# Calculate number of chunks
+element_size = np.int32(0)  # Arbitrary int32 to get size
+max_elements = available_memory // element_size
+row_size = element_size * max_columns
+row_chunk_number = max_elements // row_size
+
+rows_per_chunk = row_size // max_elements
+
+# Calculate chunks of dot products and prune for needed distances
+temp_matrix = np.zeros((row_size, max_columns), dtype=np.int32)
+
+for chunk in range(0, row_chunk_number):
+    sliced_coords1 = coords1[chunk * rows_per_chunk:chunk+1 * rows_per_chunk, :]
+    sliced_coords2 = coords2[chunk * rows_per_chunk:chunk+1 * rows_per_chunk, :]
+
+    sliced_expression1 = expression_matrix1[chunk * rows_per_chunk:chunk+1 * rows_per_chunk, :]
+    sliced_expression2 = expression_matrix2[chunk * rows_per_chunk:chunk+1 * rows_per_chunk, :]
+
+    # Compute difference matrices, transpose, and multiply
+
+    physical_difference_matrix = sliced_coords1 - sliced_coords2
+    physical_difference_flipped = physical_difference_matrix.transpose()
+    physical_rank_order = np.dot(physical_difference_flipped, physical_difference_matrix)
+
+    expression_difference_matrix = sliced_expression1 - sliced_expression2
+    expression_difference_flipped = expression_difference_matrix.transpose()
+    expression_rank_order = np.dot(expression_difference_flipped, expression_difference_matrix)
+
+    for cell_idx in range(0, rows_per_chunk):
+        for neighbour_idx in neighbour_indices[cell_idx * chunk]:
+            distances_matrix[cell_idx * chunk][neighbour_idx] = physical_rank_order[cell_idx][neighbour_idx]
 
 # Iterate through all cells in adata1 and plot neighbors from adata2
 for idx, cell_id1 in enumerate(adata1.obs_names):
