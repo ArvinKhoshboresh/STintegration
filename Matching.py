@@ -126,8 +126,6 @@ sliced_coords2 = coords2[:max_rows, :]
 sliced_expression1 = expression_matrix1[:max_rows, :]
 sliced_expression2 = expression_matrix2[:max_rows, :]
 
-# TODO: Stream dot product results into a sparse matrix
-
 # Calculate number of chunks
 element_size = sys.getsizeof(np.int32(0))  # Arbitrary int32 to get size
 row_size = element_size * coords2.shape[0]
@@ -146,7 +144,6 @@ for chunk in range(0, int(number_of_chunks)):
 
     # Compute difference matrices, transpose, and multiply
 
-    print(f"{sliced_coords1}    {sliced_coords2}")
     physical_difference_matrix = sliced_coords1 - sliced_coords2
     physical_difference_flipped = physical_difference_matrix.transpose()
     physical_rank_order = np.matmul(physical_difference_matrix, physical_difference_flipped)
@@ -155,11 +152,14 @@ for chunk in range(0, int(number_of_chunks)):
     expression_difference_flipped = expression_difference_matrix.transpose()
     expression_rank_order = np.matmul(expression_difference_matrix, expression_difference_flipped)
 
+    np.set_printoptions(threshold=np.inf)
+    print(distances_matrix.todense())
+
     for cell_idx in range(0, rows_per_chunk):
         for neighbour_idx in neighbour_indices[cell_idx * chunk]:
             weighted_physical_distance = weighted_distance(np.sqrt(physical_rank_order[cell_idx][neighbour_idx]), 2)
             expression_distance = np.sqrt(expression_rank_order[cell_idx][neighbour_idx])
-            print(f"distances_matrix shape: {distances_matrix.shape}      neighbour_idx: {neighbour_idx}")
+            print(f"distances_matrix: {distances_matrix[cell_idx * chunk][neighbour_idx]}      neighbour_idx: {neighbour_indices[cell_idx * chunk]}")
             distances_matrix[cell_idx * chunk][neighbour_idx] = np.add(weighted_physical_distance * 10000,
                                                                        expression_distance / 10000)
 
