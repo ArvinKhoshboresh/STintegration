@@ -146,10 +146,16 @@ for chunk in range(0, int(number_of_chunks)):
                 expression_distance = np.sqrt(expression_rank_order[cell_idx, neighbour_idx])
                 distances_matrix[(max_rows * chunk) + cell_idx, neighbour_idx] = np.add(weighted_physical_distance * 100000,
                                                                                         expression_distance / 100000)
+                print(f"\nCell {(max_rows * chunk) + cell_idx}:\n"
+                      f"Calced Distance: {distances_matrix[(max_rows * chunk) + cell_idx, neighbour_idx]}\n"
+                      f"Exp Coords1: {sliced_expression1[cell_idx]}\n"
+                      f"Exp Coords2: {sliced_expression2[neighbour_idx]}\n"
+                      f"Calced Exp Distance: {np.sqrt(expression_rank_order[cell_idx, neighbour_idx])}\n"
+                      f"Spt Coords1: {sliced_coords1[cell_idx]}\n"
+                      f"Spt Coords2: {sliced_coords2[neighbour_idx]}\n"
+                      f"Calced Spatial Distance: {np.sqrt(physical_rank_order[cell_idx, neighbour_idx])}\n")
             except:
                 print("A Neighbour was removed when equalizing shape.")
-
-    print(distances_matrix.todense())
 
 # ####################### FOR LOOP METHOD #########################
 #
@@ -217,9 +223,6 @@ for chunk in range(0, int(number_of_chunks)):
 
 distances_matrix.tocsr()
 distances_matrix *= -1
-
-logger.info("Distances Matrix:")
-logger.info(distances_matrix)
 
 # ############### MULTIPLE MAPPING ALLOWED METHOD ################
 # # Draw red line for lowest expression Euclidean distance match
