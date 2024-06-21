@@ -14,7 +14,7 @@ start_time = time.time()
 
 logger = logging.getLogger('logger')
 logging.basicConfig(level=logging.INFO, format='')
-np.set_printoptions(edgeitems=100)
+np.set_printoptions(edgeitems=20)
 
 # Load AnnData objects
 adata1_path = sys.argv[1]
@@ -68,7 +68,7 @@ kdtree2 = KDTree(coords2)
 
 # Define constants
 distance_threshold = 0.2  # In CCF units
-available_memory = 60000000000  # In bytes, gets padded by 10%. 60GB
+available_memory = 60000000000  # In bytes, gets padded by 20%. 60GB
 available_memory *= 0.8
 
 # Use query_ball_tree to find neighboring cells
@@ -88,7 +88,7 @@ expression_matrix1 = adata1.X
 expression_matrix2 = adata2.X
 
 # Create matrix to hold all distances to each pair in adata2
-distances_matrix = lil_matrix((coords1.shape[0], coords2.shape[0]), dtype=np.int32)
+distances_matrix = lil_matrix((coords1.shape[0], coords2.shape[0]))
 
 
 def weighted_distance(distance, scale):
@@ -122,40 +122,54 @@ rows_per_chunk = math.ceil(max_rows / number_of_chunks)
 
 # Calculate chunks of dot products and prune for needed distances
 for chunk in range(0, int(number_of_chunks)):
-    sliced_coords1 = coords1[chunk * rows_per_chunk:chunk+1 * rows_per_chunk, :]
-    sliced_coords2 = coords2[chunk * rows_per_chunk:chunk+1 * rows_per_chunk, :]
+    chunked_coords1 = sliced_coords1[chunk * rows_per_chunk:chunk + 1 * rows_per_chunk, :]
+    chunked_coords2 = sliced_coords2[chunk * rows_per_chunk:chunk + 1 * rows_per_chunk, :]
 
-    sliced_expression1 = expression_matrix1[chunk * rows_per_chunk:chunk+1 * rows_per_chunk, :]
-    sliced_expression2 = expression_matrix2[chunk * rows_per_chunk:chunk+1 * rows_per_chunk, :]
+    chunked_expression1 = sliced_expression1[chunk * rows_per_chunk:chunk+1 * rows_per_chunk, :]
+    chunked_expression2 = sliced_expression2[chunk * rows_per_chunk:chunk+1 * rows_per_chunk, :]
 
-    # Compute difference matrices, transpose, and multiply
+    # time1 = time.time()
+    # physical_difference_matrix = np.subtract(chunked_coords1[:, np.newaxis, :], chunked_coords2[np.newaxis, :, :]) ** 2
+    # physical_rank_order = np.sqrt(np.sum(physical_difference_matrix, axis=2))
+    # print(f" time1: {time.time() - time1}")
 
-    physical_difference_matrix = np.subtract(sliced_coords1, sliced_coords2)
-    physical_difference_flipped = physical_difference_matrix.transpose()
-    physical_rank_order = np.matmul(physical_difference_matrix, physical_difference_flipped)
+    time2 = time.time()
+    physical_norm1 = np.sum(chunked_coords1 ** 2, axis=1).reshape(-1, 1)
+    physical_norm2 = np.sum(chunked_coords2 ** 2, axis=1).reshape(1, -1)
+    physical_dot_product = np.dot(chunked_coords1, chunked_coords2.T)
+    physical_distances = np.sqrt(physical_norm1 + physical_norm2 - 2 * physical_dot_product)
 
-    expression_difference_matrix = np.subtract(sliced_expression1, sliced_expression2)
-    expression_difference_flipped = expression_difference_matrix.transpose()
-    expression_rank_order = np.matmul(expression_difference_matrix, expression_difference_flipped)
+    expression_norm1 = np.sum(chunked_expression1 ** 2, axis=1).reshape(-1, 1)
+    expression_norm2 = np.sum(chunked_expression2 ** 2, axis=1).reshape(1, -1)
+    expression_dot_product = np.dot(chunked_expression1, chunked_expression2.T)
+    expression_distances = np.sqrt(expression_norm1 + expression_norm2 - 2 * expression_dot_product)
+    print(f" Time to Calculate Euclidian Distances: {time.time() - time2}s")
 
+    expression_difference_matrix = np.subtract(chunked_expression1, chunked_expression2) ** 2
+    expression_rank_order = expression_difference_matrix.dot(expression_difference_matrix.T)
+
+    neighbours_removed = 0
     for cell_idx in range(0, rows_per_chunk):
-        cell_neighbours = neighbour_indices[(max_rows * chunk) + cell_idx]
-        for neighbour_idx in cell_neighbours:
-            try:
-                weighted_physical_distance = weighted_distance(np.sqrt(physical_rank_order[cell_idx, neighbour_idx]), 2)
-                expression_distance = np.sqrt(expression_rank_order[cell_idx, neighbour_idx])
-                distances_matrix[(max_rows * chunk) + cell_idx, neighbour_idx] = np.add(weighted_physical_distance * 100000,
-                                                                                        expression_distance / 100000)
-                print(f"\nCell {(max_rows * chunk) + cell_idx}:\n"
-                      f"Calced Distance: {distances_matrix[(max_rows * chunk) + cell_idx, neighbour_idx]}\n"
-                      f"Exp Coords1: {sliced_expression1[cell_idx]}\n"
-                      f"Exp Coords2: {sliced_expression2[neighbour_idx]}\n"
-                      f"Calced Exp Distance: {np.sqrt(expression_rank_order[cell_idx, neighbour_idx])}\n"
-                      f"Spt Coords1: {sliced_coords1[cell_idx]}\n"
-                      f"Spt Coords2: {sliced_coords2[neighbour_idx]}\n"
-                      f"Calced Spatial Distance: {np.sqrt(physical_rank_order[cell_idx, neighbour_idx])}\n")
-            except:
-                print("A Neighbour was removed when equalizing shape.")
+            cell_neighbours = neighbour_indices[(max_rows * chunk) + cell_idx]
+            for neighbour_idx in cell_neighbours:
+                try:
+                    weighted_physical_distance = weighted_distance(physical_distances[cell_idx, neighbour_idx], 2)
+                    expression_distance = expression_distances[cell_idx, neighbour_idx]
+                    distances_matrix[(max_rows * chunk) + cell_idx, neighbour_idx] = np.add(weighted_physical_distance * 100000,
+                                                                                            expression_distance / 100000)
+
+                    # print(f"\nCell {(max_rows * chunk) + cell_idx} from adata1 to Cell {neighbour_idx} from adata2:\n"
+                    #       f"Calced Distance: {distances_matrix[(max_rows * chunk) + cell_idx, neighbour_idx]}\n"
+                    #       # f"Exp Coords1: {','.join(map(str, chunked_expression1[cell_idx]))}\n"
+                    #       # f"Exp Coords2: {','.join(map(str, chunked_expression2[neighbour_idx]))}\n"
+                    #       f"Calced Exp Distance: {expression_distances[cell_idx, neighbour_idx]}\n"
+                    #       f"Spt Coords1: {','.join(map(str, chunked_coords1[cell_idx]))}\n"
+                    #       f"Spt Coords2: {','.join(map(str, chunked_coords2[neighbour_idx]))}\n"
+                    #       f"Calced Spt Distance: {physical_distances[cell_idx, neighbour_idx]}\n")
+
+                except:
+                    neighbours_removed += 1
+    logger.info(f"Neighbours Removed when Equalizing Shape: {neighbours_removed}")
 
 # ####################### FOR LOOP METHOD #########################
 #
@@ -221,8 +235,9 @@ for chunk in range(0, int(number_of_chunks)):
 #
 ###################### END FOR LOOP METHOD (GOOD RIDDANCE) ######################
 
-distances_matrix.tocsr()
+
 distances_matrix *= -1
+distances_matrix = distances_matrix.tocsr()
 
 # ############### MULTIPLE MAPPING ALLOWED METHOD ################
 # # Draw red line for lowest expression Euclidean distance match
@@ -239,7 +254,7 @@ distances_matrix *= -1
 
 ################# Linear sum assingment method (no multiple mapping allowed) ################
 logger.info("Finding best matches...")
-adata1_match_idx, adata2_match_idx = min_weight_full_bipartite_matching(distances_matrix, maximize=True)
+adata1_match_idx, adata2_match_idx = min_weight_full_bipartite_matching(distances_matrix)
 logger.info("Linear Sum Assignment solution:")
 for idx in range(len(adata1_match_idx)):
     if dot_product_euclidean_distance(coords1[adata1_match_idx[idx]],
