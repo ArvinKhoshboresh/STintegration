@@ -105,135 +105,38 @@ def weighted_distance(distance, scale):
     # Apply exponential growth function
     return distance_threshold * (1 - math.exp(-distance / (scale * distance_threshold)))
 
-
 time2 = time.time()
-# Equalize matrix shape
-max_rows = min(expression_matrix1.shape[0], expression_matrix2.shape[0])
-max_physical_columns = 3
-max_expression_columns = min(expression_matrix1.shape[1], expression_matrix2.shape[1])
+for cell_idx in coords1:
+    neighbours_physical_matrix = numpy.matrix()
+    neighbours_expression_matrix = numpy.matrix()
+    for neighbour_idx in neighbour_indices[cell_idx]:
+        neighbours_physical_matrix.append(coords2[neighbour_idx])
+        neighbours_expression_matrix.append(expression_matrix2[neighbour_idx])
 
-sliced_coords1 = coords1[:max_rows, :]
-sliced_coords2 = coords2[:max_rows, :]
-sliced_expression1 = expression_matrix1[:max_rows, :]
-sliced_expression2 = expression_matrix2[:max_rows, :]
+    physical_vector_norm = np.sum(coords1[cell_idx] ** 2)
+    physical_norm2 = np.sum(neighbours_physical_matrix ** 2, axis=1).reshape(1, -1)
+    physical_dot_product = np.dot(coords1[cell_idx], neighbours_physical_matrix)
+    physical_distances = np.sqrt(physical_vector_norm + physical_norm2 - 2 * physical_dot_product)
 
-# Calculate number of chunks
-element_size = sys.getsizeof(np.int32(0))  # Arbitrary int32 to get size
-row_size = element_size * coords2.shape[0]
-number_of_chunks = math.ceil(row_size * max_rows / available_memory)
-rows_per_chunk = math.ceil(max_rows / number_of_chunks)
+    expression_vector_norm = np.sum(expression_matrix1[cell_idx] ** 2)
+    expression_norm2 = np.sum(neighbours_expression_matrix ** 2, axis=1).reshape(1, -1)
+    expression_dot_product = np.dot(expression_matrix1[cell_idx], neighbours_expression_matrix)
+    expression_distances = np.sqrt(expression_vector_norm + expression_norm2 - 2 * expression_dot_product)
 
-# Calculate chunks of dot products and prune for needed distances
-for chunk in range(0, int(number_of_chunks)):
-    chunked_coords1 = sliced_coords1[chunk * rows_per_chunk:chunk + 1 * rows_per_chunk, :]
-    chunked_coords2 = sliced_coords2[chunk * rows_per_chunk:chunk + 1 * rows_per_chunk, :]
+    for idx, neighbour_idx in neighbour_indices[cell_idx]:
+        distances_matrix[cell_idx, neighbour_idx] = np.add(weighted_distance(physical_distances[idx]) * 100000,
+                                                           expression_distances[idx] / 100000)
 
-    chunked_expression1 = sliced_expression1[chunk * rows_per_chunk:chunk+1 * rows_per_chunk, :]
-    chunked_expression2 = sliced_expression2[chunk * rows_per_chunk:chunk+1 * rows_per_chunk, :]
+        print(f"\nCell {cell_idx} from adata1 to Cell {neighbour_idx} from adata2:\n"
+              f"Calced Distance: {distances_matrix[(cell_idx, neighbour_idx) + cell_idx, neighbour_idx]}\n"
+              # f"Exp Coords1: {','.join(map(str, expression_matrix1[cell_idx]))}\n"
+              # f"Exp Coords2: {','.join(map(str, expression_matrix2[neighbour_idx]))}\n"
+              f"Calced Exp Distance: {expression_distances[idx]}\n"
+              f"Spt Coords1: {','.join(map(str, coords1[cell_idx]))}\n"
+              f"Spt Coords2: {','.join(map(str, coords2[neighbour_idx]))}\n"
+              f"Calced Spt Distance: {physical_distances[idx]}\n")
 
-    # time1 = time.time()
-    # physical_difference_matrix = np.subtract(chunked_coords1[:, np.newaxis, :], chunked_coords2[np.newaxis, :, :]) ** 2
-    # physical_rank_order = np.sqrt(np.sum(physical_difference_matrix, axis=2))
-    # print(f" time1: {time.time() - time1}")
-
-
-    physical_norm1 = np.sum(chunked_coords1 ** 2, axis=1).reshape(-1, 1)
-    physical_norm2 = np.sum(chunked_coords2 ** 2, axis=1).reshape(1, -1)
-    physical_dot_product = np.dot(chunked_coords1, chunked_coords2.T)
-    physical_distances = np.sqrt(physical_norm1 + physical_norm2 - 2 * physical_dot_product)
-
-    expression_norm1 = np.sum(chunked_expression1 ** 2, axis=1).reshape(-1, 1)
-    expression_norm2 = np.sum(chunked_expression2 ** 2, axis=1).reshape(1, -1)
-    expression_dot_product = np.dot(chunked_expression1, chunked_expression2.T)
-    expression_distances = np.sqrt(expression_norm1 + expression_norm2 - 2 * expression_dot_product)
-
-    neighbours_removed = 0
-    for cell_idx in range(0, rows_per_chunk):
-            cell_neighbours = neighbour_indices[(max_rows * chunk) + cell_idx]
-            for neighbour_idx in cell_neighbours:
-                try:
-                    weighted_physical_distance = weighted_distance(physical_distances[cell_idx, neighbour_idx], 2)
-                    expression_distance = expression_distances[cell_idx, neighbour_idx]
-                    distances_matrix[(max_rows * chunk) + cell_idx, neighbour_idx] = np.add(weighted_physical_distance * 100000,
-                                                                                            expression_distance / 100000)
-
-                    print(f"\nCell {(max_rows * chunk) + cell_idx} from adata1 to Cell {neighbour_idx} from adata2:\n"
-                          f"Calced Distance: {distances_matrix[(max_rows * chunk) + cell_idx, neighbour_idx]}\n"
-                          # f"Exp Coords1: {','.join(map(str, chunked_expression1[cell_idx]))}\n"
-                          # f"Exp Coords2: {','.join(map(str, chunked_expression2[neighbour_idx]))}\n"
-                          f"Calced Exp Distance: {expression_distances[cell_idx, neighbour_idx]}\n"
-                          f"Spt Coords1: {','.join(map(str, chunked_coords1[cell_idx]))}\n"
-                          f"Spt Coords2: {','.join(map(str, chunked_coords2[neighbour_idx]))}\n"
-                          f"Calced Spt Distance: {physical_distances[cell_idx, neighbour_idx]}\n")
-
-                except:
-                    neighbours_removed += 1
-    logger.info(f"Neighbours Removed when Equalizing Shape: {neighbours_removed}")
 print(f" Time to Calculate Euclidian Distances: {time.time() - time2}s")
-
-# ####################### FOR LOOP METHOD #########################
-#
-#
-# def dot_product_euclidean_distance(coords1, coords2):
-#     """
-#     Takes two cell coords in many dimensional space, returns Euclidean distance approximated by dot product of
-#     difference vector
-#     """
-#
-#     difference_vectors = coords1 - coords2
-#     return np.sqrt(np.matmul(difference_vectors, difference_vectors))
-#
-#
-# for_loop_distances_matrix = lil_matrix((len(coords1), len(coords2)), dtype=np.int32)
-#
-# # Iterate through all cells in adata1 and plot neighbors from adata2
-# for idx, cell_id1 in enumerate(adata1.obs_names):
-#
-#     # Get coordinates of the current cell
-#     cell_coords1 = coords1[idx, :]
-#
-#     # Get indices of neighboring cells in adata2
-#     cell_neighbours = neighbour_indices[idx]
-#
-#     # Get vector representation of adata1 cell's gene expression
-#     expression_vector1 = expression_matrix1[idx]
-#
-#     # print result for the current cell
-#     #logger.info(f"Idx: {idx}, Cell ID from adata1: {cell_id1}")
-#     #logger.info(f"Cells within {distance_threshold} units in adata2: \n")
-#
-#     # Plot lines connecting the current cell to its neighbors and calculate distances
-#     for neighbour_idx in cell_neighbours:
-#         cell_coords2 = coords2[neighbour_idx, :]
-#
-#         # Calculate distance and weighted distance
-#         weighted_physical_distance = weighted_distance(dot_product_euclidean_distance(cell_coords1, cell_coords2), 2)
-#         weighted_physical_distance = weighted_physical_distance * 100000  # Creates values broadly in the 3 figures
-#
-#         # Add distance to physical distance matrix
-#         for_loop_distances_matrix[idx, neighbour_idx] = weighted_physical_distance
-#
-#         # Plot match line
-#         # neighours_fig.plot([cell_coords1[0], cell_coords2[0]], [cell_coords1[1], cell_coords2[1]], 'k-', lw=0.25)
-#
-#         # print distance for verification
-#         #logger.info(f"Distance from {cell_id1} to {adata2.obs_names[neighbour_idx]}: {weighted_physical_distance:.6f}")
-#
-#         # Get match expression vector
-#         expression_vector2 = expression_matrix2[neighbour_idx]
-#
-#         expression_distance = dot_product_euclidean_distance(expression_vector1, expression_vector2)
-#         for_loop_distances_matrix[idx, neighbour_idx] = ((np.add(distances_matrix[idx, neighbour_idx],
-#                                                                  expression_distance)) / 100000)
-#
-# for idx in range(0, coords1.shape[0]):
-#     for idx2 in range(0, coords2.shape[0]):
-#         first = distances_matrix[idx, idx2]
-#         second = for_loop_distances_matrix[idx, idx2]
-#         if first or second:
-#             print(f"Matrix Method: {first}   For-Loop Method: {second}")
-#
-###################### END FOR LOOP METHOD (GOOD RIDDANCE) ######################
 
 distances_matrix *= -1
 distances_matrix = distances_matrix.tocsr()
