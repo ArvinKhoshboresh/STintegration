@@ -106,13 +106,68 @@ def weighted_distance(distance, scale):
 
 time2 = time.time()
 
-window1_size = 1
-window2_size = window1_size + distance_threshold
+window_size1 = 1
 min_dimensions = np.min(coords1.min(axis=0), coords2.min(axis=0))
 max_dimensions = np.max(coords1.min(axis=0), coords2.max(axis=0))
-section_numbers = tuple(math.ceil(dimension / window1_size) for dimension in max_dimensions)
+section_numbers = tuple(math.ceil(dimension / window_size1) for dimension in max_dimensions)
 
 # TODO: Iterate over the windows
+for x_window in range(0, section_numbers[0]):
+    for y_window in range(0, section_numbers[1]):
+        for z_window in range(0, section_numbers[2]):
+
+            window_origin1 = np.array([x_window, y_window, z_window]) * window_size1
+            window_end1 = window_origin1 + window_size1
+
+            half_dist_thresh = distance_threshold / 2
+            window_origin2 = window_origin1 - half_dist_thresh
+            window_end2 = window_end1 + half_dist_thresh
+
+            mask1 = np.all((coords1 >= window_origin1) & (coords1 <= window_end1), axis=1)
+            mask2 = np.all((coords2 >= window_origin1) & (coords2 <= window_end1), axis=1)
+
+            window_coords1 = coords1[mask1]
+            window_coords2 = coords2[mask2]
+            indices1 = np.where(mask1)[0]
+            indices2 = np.where(mask2)[0]
+
+            section_expression1 = expression_matrix1[indices1]
+            section_expression2 = expression_matrix2[indices2]
+
+            physical_norm1 = np.sum(window_coords1 ** 2, axis=1).reshape(-1, 1)
+            physical_norm2 = np.sum(window_coords2 ** 2, axis=1).reshape(1, -1)
+            physical_dot_product = np.dot(window_coords1, window_coords2.T)
+            physical_distances = np.sqrt(physical_norm1 + physical_norm2 - 2 * physical_dot_product)
+
+            expression_norm1 = np.sum(section_expression1 ** 2, axis=1).reshape(-1, 1)
+            expression_norm2 = np.sum(section_expression2 ** 2, axis=1).reshape(1, -1)
+            expression_dot_product = np.dot(section_expression1, section_expression2.T)
+            expression_distances = np.sqrt(expression_norm1 + expression_norm2 - 2 * expression_dot_product)
+
+            neighbours_removed = 0
+            for cell_idx in range(0, len(window_coords1)):
+                cell_neighbours = neighbour_indices[(max_rows * chunk) + cell_idx]
+                for neighbour_idx in cell_neighbours:
+                    try:
+                        weighted_physical_distance = weighted_distance(physical_distances[cell_idx, neighbour_idx], 2)
+                        expression_distance = expression_distances[cell_idx, neighbour_idx]
+                        distances_matrix[(max_rows * chunk) + cell_idx, neighbour_idx] = np.add(
+                            weighted_physical_distance * 100000,
+                            expression_distance / 100000)
+
+                        print(
+                            f"\nCell {(max_rows * chunk) + cell_idx} from adata1 to Cell {neighbour_idx} from adata2:\n"
+                            f"Calced Distance: {distances_matrix[(max_rows * chunk) + cell_idx, neighbour_idx]}\n"
+                            # f"Exp Coords1: {','.join(map(str, chunked_expression1[cell_idx]))}\n"
+                            # f"Exp Coords2: {','.join(map(str, chunked_expression2[neighbour_idx]))}\n"
+                            f"Calced Exp Distance: {expression_distances[cell_idx, neighbour_idx]}\n"
+                            f"Spt Coords1: {','.join(map(str, chunked_coords1[cell_idx]))}\n"
+                            f"Spt Coords2: {','.join(map(str, chunked_coords2[neighbour_idx]))}\n"
+                            f"Calced Spt Distance: {physical_distances[cell_idx, neighbour_idx]}\n")
+
+                    except:
+                        neighbours_removed += 1
+            logger.info(f"Neighbours Removed when Equalizing Shape: {neighbours_removed}")
 
 print(f" Time to Calculate Euclidian Distances: {time.time() - time2}s")
 
