@@ -1,6 +1,5 @@
 import time
 import os
-
 import numpy
 import scanpy as sc
 import logging
@@ -106,6 +105,17 @@ def weighted_distance(distance, scale):
     return distance_threshold * (1 - math.exp(-distance / (scale * distance_threshold)))
 
 time2 = time.time()
+
+window1_size = 1
+window2_size = window1_size + distance_threshold
+min_dimensions = np.min(coords1.min(axis=0), coords2.min(axis=0))
+max_dimensions = np.max(coords1.min(axis=0), coords2.max(axis=0))
+section_numbers = tuple(math.ceil(dimension / window1_size) for dimension in max_dimensions)
+
+# TODO: Iterate over the windows
+
+print(f" Time to Calculate Euclidian Distances: {time.time() - time2}s")
+
 for cell_idx in range(0, len(coords1)):
     neighbours_physical_matrix = numpy.zeros((len(neighbour_indices[cell_idx]), len(coords2[0])))
     neighbours_expression_matrix = numpy.zeros((len(neighbour_indices[cell_idx]), len(expression_matrix2[0])))
@@ -135,8 +145,6 @@ for cell_idx in range(0, len(coords1)):
               f"Spt Coords1: {','.join(map(str, coords1[cell_idx]))}\n"
               f"Spt Coords2: {','.join(map(str, coords2[neighbour_indices[cell_idx][idx]]))}\n"
               f"Calced Spt Distance: {physical_distances[idx]}\n")
-
-print(f" Time to Calculate Euclidian Distances: {time.time() - time2}s")
 
 distances_matrix *= -1
 distances_matrix = distances_matrix.tocsr()
