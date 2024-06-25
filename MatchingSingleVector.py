@@ -68,7 +68,7 @@ kdtree1 = KDTree(coords1)
 kdtree2 = KDTree(coords2)
 
 # Define constants
-distance_threshold = 0.2  # In CCF units
+distance_threshold = 0.5  # In CCF units
 
 # Use query_ball_tree to find neighboring cells
 neighbour_indices = kdtree1.query_ball_tree(kdtree2, distance_threshold)
@@ -77,8 +77,8 @@ neighbour_indices = kdtree1.query_ball_tree(kdtree2, distance_threshold)
 fig, neighours_fig = plt.subplots(figsize=(15, 10), dpi=600)
 
 # Plot all cells from both datasets
-neighours_fig.scatter(coords1[:, 0], coords1[:, 1], c='blue', label='adata1', alpha=0.5, s=0.4)
-neighours_fig.scatter(coords2[:, 0], coords2[:, 1], c='red', label='adata2', alpha=0.5, s=0.4)
+neighours_fig.scatter(coords1[:, 0], coords1[:, 1], c='blue', label='adata1', alpha=0.5, s=0.3)
+neighours_fig.scatter(coords2[:, 0], coords2[:, 1], c='red', label='adata2', alpha=0.5, s=0.3)
 # for cell_Idx, cell_coord in enumerate(coords1):
 #     neighours_fig.annotate(cell_Idx, (cell_coord[0], cell_coord[1]), fontsize=4)
 
