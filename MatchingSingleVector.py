@@ -1,15 +1,16 @@
 import time
 import os
-
 import numpy
 import scanpy as sc
 import logging
+from scipy.sparse import coo_matrix, lil_matrix
 from scipy.spatial import KDTree
 from scipy.optimize import linear_sum_assignment
 import matplotlib.pyplot as plt
 import numpy as np
 import math
 import sys
+import sslap
 
 start_time = time.time()
 
@@ -87,7 +88,8 @@ expression_matrix1 = adata1.X
 expression_matrix2 = adata2.X
 
 # Create matrix to hold all distances to each pair in adata2
-distances_matrix = np.full((coords1.shape[0], coords2.shape[0]), fill_value=32767, dtype=np.int16)
+# distances_matrix = np.full((coords1.shape[0], coords2.shape[0]), fill_value=32767, dtype=np.int16)
+distances_matrix = lil_matrix((coords1.size, coords2.size))
 
 
 def weighted_distance(distance, scale):
@@ -154,13 +156,17 @@ print(f" Time to Calculate Euclidian Distances: {time.time() - time2}s")
 
 ################# Linear sum assingment method (no multiple mapping allowed) ################
 logger.info("Finding best matches...")
-adata1_match_idx, adata2_match_idx = linear_sum_assignment(distances_matrix)
+coo_distances_matrix = distances_matrix.tocoo()
+matches = sslap.auction_solve(coo_mat=coo_distances_matrix, problem='min')
 logger.info("Linear Sum Assignment solution:")
-for idx in range(len(adata1_match_idx)):
-    cell_coords1 = coords1[adata1_match_idx[idx], :]
-    cell_coords2 = coords2[adata2_match_idx[idx], :]
-    neighours_fig.plot([cell_coords1[0], cell_coords2[0]], [cell_coords1[1], cell_coords2[1]], 'r-', lw=0.05)
-    logger.info(f"{adata1_match_idx[idx]} {adata2_match_idx[idx]}")
+logger.info(f"{matches}")
+
+
+# for idx in range(len(adata1_match_idx)):
+#     cell_coords1 = coords1[adata1_match_idx[idx], :]
+#     cell_coords2 = coords2[adata2_match_idx[idx], :]
+#     neighours_fig.plot([cell_coords1[0], cell_coords2[0]], [cell_coords1[1], cell_coords2[1]], 'r-', lw=0.05)
+#     logger.info(f"{adata1_match_idx[idx]} {adata2_match_idx[idx]}")
 
 # # Write matches to disk
 # matches_array_length = max(len(adata1_match_idx), len(adata2_match_idx))
