@@ -1,20 +1,22 @@
 import time
 import os
-
 import numpy
 import scanpy as sc
 import logging
+from scipy.sparse import coo_matrix, lil_matrix
 from scipy.spatial import KDTree
 from scipy.optimize import linear_sum_assignment
 import matplotlib.pyplot as plt
 import numpy as np
 import math
 import sys
+import sslap
 
 start_time = time.time()
 
 logger = logging.getLogger('logger')
-logging.basicConfig(level=logging.INFO, format='')
+grey = "\x1b[38;20m"
+logging.basicConfig(level=logging.INFO, format="\x1b[38;20m" + "%(message)s")
 np.set_printoptions(edgeitems=20)
 
 # Load AnnData objects
@@ -68,17 +70,17 @@ kdtree1 = KDTree(coords1)
 kdtree2 = KDTree(coords2)
 
 # Define constants
-distance_threshold = 0.5  # In CCF units
+distance_threshold = 0.2  # In CCF units
 
 # Use query_ball_tree to find neighboring cells
 neighbour_indices = kdtree1.query_ball_tree(kdtree2, distance_threshold)
 
 # Create plot
-fig, neighours_fig = plt.subplots(figsize=(15, 10), dpi=600)
+fig, neighours_fig = plt.subplots(figsize=(15, 10), dpi=800)
 
 # Plot all cells from both datasets
-neighours_fig.scatter(coords1[:, 0], coords1[:, 1], c='blue', label='adata1', alpha=0.5, s=0.3)
-neighours_fig.scatter(coords2[:, 0], coords2[:, 1], c='red', label='adata2', alpha=0.5, s=0.3)
+neighours_fig.scatter(coords1[:, 0], coords1[:, 1], c='blue', label='adata1', alpha=0.5, s=0.2, linewidths=0.3)
+neighours_fig.scatter(coords2[:, 0], coords2[:, 1], c='red', label='adata2', alpha=0.5, s=0.2, linewidths=0.3)
 # for cell_Idx, cell_coord in enumerate(coords1):
 #     neighours_fig.annotate(cell_Idx, (cell_coord[0], cell_coord[1]), fontsize=4)
 
@@ -87,7 +89,8 @@ expression_matrix1 = adata1.X
 expression_matrix2 = adata2.X
 
 # Create matrix to hold all distances to each pair in adata2
-distances_matrix = np.full((coords1.shape[0], coords2.shape[0]), fill_value=32767, dtype=np.int16)
+# distances_matrix = np.full((coords1.shape[0], coords2.shape[0]), fill_value=32767, dtype=np.int16)
+distances_matrix = lil_matrix((coords1.size, coords2.size))
 
 
 def weighted_distance(distance, scale):
@@ -126,7 +129,7 @@ for cell_idx in range(0, len(coords1)):
         expression_distance = expression_distances[idx]
         if spatial_distance > 0 and expression_distance > 0:
             distances_matrix[cell_idx, neighbour_indices[cell_idx][idx]] = round(np.add(
-                weighted_distance(spatial_distance, 2) * 1000, expression_distance / 30000))
+                weighted_distance(spatial_distance, 1.5) * 1000, expression_distance / 30000))
 
         # print(f"\nCell {cell_idx} from adata1 to Cell {neighbour_indices[cell_idx][idx]} from adata2:\n"
         #       f"Calced Distance: {distances_matrix[cell_idx, neighbour_indices[cell_idx][idx]]}\n"
@@ -154,15 +157,20 @@ print(f" Time to Calculate Euclidian Distances: {time.time() - time2}s")
 
 ################# Linear sum assingment method (no multiple mapping allowed) ################
 logger.info("Finding best matches...")
-adata1_match_idx, adata2_match_idx = linear_sum_assignment(distances_matrix)
+coo_distances_matrix = distances_matrix.tocoo() * -1
+match_struct = sslap.auction_solve(coo_mat=coo_distances_matrix, problem='min', cardinality_check=False)
+matches = match_struct["sol"]
 logger.info("Linear Sum Assignment solution:")
-for idx in range(len(adata1_match_idx)):
-    cell_coords1 = coords1[adata1_match_idx[idx], :]
-    cell_coords2 = coords2[adata2_match_idx[idx], :]
-    neighours_fig.plot([cell_coords1[0], cell_coords2[0]], [cell_coords1[1], cell_coords2[1]], 'r-', lw=0.05)
-    logger.info(f"{adata1_match_idx[idx]} {adata2_match_idx[idx]}")
+
+for idx in range(len(matches)):
+    if not matches[idx] == -1:
+        logger.info(f"{idx} {matches[idx]}")
+        cell_coords1 = coords1[idx, :]
+        cell_coords2 = coords2[matches[idx], :]
+        neighours_fig.plot([cell_coords1[0], cell_coords2[0]], [cell_coords1[1], cell_coords2[1]], 'r-', lw=0.03)
 
 # # Write matches to disk
+np.save('matches.npy', matches)
 # matches_array_length = max(len(adata1_match_idx), len(adata2_match_idx))
 # with open('matches.txt', 'w') as file:
 #     for idx in range(matches_array_length):
