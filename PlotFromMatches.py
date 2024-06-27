@@ -18,6 +18,8 @@ adata2 = sc.read_h5ad(adata2_path)
 logger.info(adata1)
 logger.info(adata2)
 
+distance_threshold = 0.2
+
 # Check if spatial coordinates are present in both AnnData objects
 if 'X_spatial' not in adata1.obsm:
     raise ValueError("Spatial coordinates not found in adata1.obsm['X_spatial']")
@@ -41,16 +43,24 @@ neighours_fig.scatter(coords2[:, 0], coords2[:, 1], c='red', label='adata2', alp
 # for cell_Idx, cell_coord in enumerate(coords1):
 #     neighours_fig.annotate(cell_Idx, (cell_coord[0], cell_coord[1]), fontsize=4)
 
+def euclidean_distance(point1, point2):
+    return np.sqrt(np.sum((point1 - point2) ** 2))
+
+
 # Loop through matches and plot
 for idx in range(len(matches)):
     if matches[idx] != -1:
         logger.info(f"{idx} {matches[idx]}")
         cell_coords1 = coords1[idx, :]
         cell_coords2 = coords2[matches[idx], :]
-        neighours_fig.plot([cell_coords1[0], cell_coords2[0]], [cell_coords1[1], cell_coords2[1]], 'r-', lw=0.03)
+        distance = euclidean_distance(cell_coords1, cell_coords2)
+        if distance < distance_threshold:
+            neighours_fig.plot([cell_coords1[0], cell_coords2[0]], [cell_coords1[1], cell_coords2[1]], 'r-', lw=0.03)
 
 neighours_fig.set_xlabel('X Coordinate')
 neighours_fig.set_ylabel('Y Coordinate')
 neighours_fig.legend()
 
 plt.savefig('matches.png', bbox_inches='tight')
+
+print("Script Completed")
