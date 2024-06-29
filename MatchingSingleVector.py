@@ -162,14 +162,20 @@ match_struct = sslap.auction_solve(coo_mat=coo_distances_matrix, problem='min', 
 matches = match_struct["sol"]
 logger.info("Linear Sum Assignment solution:")
 
+unmatched_cells = 0
+
 for idx in range(len(matches)):
     if not matches[idx] == -1:
         logger.info(f"{idx} {matches[idx]}")
         cell_coords1 = coords1[idx, :]
         cell_coords2 = coords2[matches[idx], :]
         neighours_fig.plot([cell_coords1[0], cell_coords2[0]], [cell_coords1[1], cell_coords2[1]], 'r-', lw=0.03)
+    else:
+        unmatched_cells += 1
+
 
 # # Write matches to disk
+print(f"Unmatched Cells: {unmatched_cells}")
 np.save('matches.npy', matches)
 # matches_array_length = max(len(adata1_match_idx), len(adata2_match_idx))
 # with open('matches.txt', 'w') as file:
