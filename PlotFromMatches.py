@@ -47,6 +47,8 @@ def euclidean_distance(point1, point2):
     return np.sqrt(np.sum((point1 - point2) ** 2))
 
 
+removed_cells = 0
+
 # Loop through matches and plot
 for idx in range(len(matches)):
     if matches[idx] != -1:
@@ -56,6 +58,10 @@ for idx in range(len(matches)):
         distance = euclidean_distance(cell_coords1, cell_coords2)
         if distance < distance_threshold:
             neighours_fig.plot([cell_coords1[0], cell_coords2[0]], [cell_coords1[1], cell_coords2[1]], 'r-', lw=0.03)
+        else:
+            removed_cells += 1
+
+print(f"Removed Cells: {removed_cells}")
 
 neighours_fig.set_xlabel('X Coordinate')
 neighours_fig.set_ylabel('Y Coordinate')
