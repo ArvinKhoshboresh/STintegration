@@ -22,7 +22,7 @@ matches = np.load(np_array_path)
 
 annotations_df = pd.read_csv(annotations_path, index_col=0)
 
-# Loop through the array and retrieve the cell ID and annotations
+# Loop through the array and retrieve the cell ID and annotation
 for idx, value in enumerate(matches):
     try:
         cell_id1 = adata1.obs_names[idx]  # Cell ID at the index position
