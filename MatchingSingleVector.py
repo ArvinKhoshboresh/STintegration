@@ -1,11 +1,9 @@
 import time
-import os
 import numpy
 import scanpy as sc
 import logging
-from scipy.sparse import coo_matrix, lil_matrix
+from scipy.sparse import lil_matrix
 from scipy.spatial import KDTree
-from scipy.optimize import linear_sum_assignment
 import matplotlib.pyplot as plt
 import numpy as np
 import math
