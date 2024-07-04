@@ -10,6 +10,35 @@ import math
 import sys
 import sslap
 
+def extract_coords(adata):
+    """
+    Extracts the CCF_AP_axis, CCF_ML_axis, and CCF_DV_axis columns from the obs DataFrame of an anndata object
+    and combines them into a single matrix.
+
+    Parameters:
+    adata (anndata.AnnData): The anndata object.
+
+    Returns:
+    np.ndarray: A matrix with X, Y, and Z coordinates in each row.
+    """
+    x = adata.obs['CCF_AP_axis'].values
+    y = adata.obs['CCF_ML_axis'].values
+    z = adata.obs['CCF_DV_axis'].values
+    return np.vstack((x, y, z)).T
+
+def weighted_distance(distance, scale):
+    """
+    Applies an exponential weighting-up to the input distance, asymptotically approaching the max_distance.
+    Scale adjusts the rate of growth.
+
+    Higher scale more gradually increases the weighted distance
+    Lower scale has less effect on lower distances, more effect on higher distances
+    """
+
+    # Apply exponential growth function
+    return distance_threshold * (1 - math.exp(-distance / (scale * distance_threshold)))
+
+
 start_time = time.time()
 
 logger = logging.getLogger('logger')
@@ -27,51 +56,26 @@ adata2 = sc.read_h5ad(adata2_path)
 logger.info(adata1)
 logger.info(adata2)
 
-# Check if spatial coordinates are present in both AnnData objects
-if 'X_spatial' not in adata1.obsm:
-    raise ValueError("Spatial coordinates not found in adata1.obsm['X_spatial']")
-if 'X_spatial' not in adata2.obsm:
-    raise ValueError("Spatial coordinates not found in adata2.obsm['X_spatial']")
-
-###################### query ball point approach (in theory slower) ##################
-# # Extract spatial coordinates and biuld KD tree
+# Extract spatial coordinates
+coords1 = extract_coords(adata1)
+coords2 = extract_coords(adata2)
 # coords1 = adata1.obsm['X_spatial']
 # coords2 = adata2.obsm['X_spatial']
-# kdtree = KDTree(coords2)
-#
-# # Define the distance threshold
-# distance_threshold = 0.5
-#
-# # Iterate through all cells in the first AnnData object
-# for idx, cell_id1 in enumerate(adata1.obs_names):
-#     # Get the coordinates of the current cell
-#     cell_coords1 = coords1[idx, :]
-#
-#     # Find all cells within the distance threshold in the second AnnData object
-#     indices = kdtree.query_ball_point(cell_coords1, distance_threshold)
-#
-#     # Get the IDs of the cells within the threshold
-#     cell_ids_within_threshold = adata2.obs_names[indices]
-#
-#     # print the result for the current cell
-#     logger.info(f"Idx: {idx}, Cell ID from adata1: {cell_id1}")
-#     logger.info(f"Cells within {distance_threshold} units in adata2: {cell_ids_within_threshold}")
-
-
-######################### query ball tree approach (in theory faster) ##############################
-# Extract spatial coordinates
-coords1 = adata1.obsm['X_spatial']
-coords2 = adata2.obsm['X_spatial']
 
 # Construct KDTree for both AnnData objects
 kdtree1 = KDTree(coords1)
 kdtree2 = KDTree(coords2)
 
 # Define constants
-distance_threshold = 0.2  # In CCF units
+distance_threshold = 3.5  # In CCF units
 
 # Use query_ball_tree to find neighboring cells
 neighbour_indices = kdtree1.query_ball_tree(kdtree2, distance_threshold)
+
+# Find average number of neighbours
+total_items = sum(len(lst) for lst in neighbour_indices)
+number_of_lists = len(neighbour_indices)
+print(f"Average number of neighbours: {total_items / number_of_lists}")
 
 # Create plot
 fig, neighours_fig = plt.subplots(figsize=(15, 10), dpi=800)
@@ -79,29 +83,20 @@ fig, neighours_fig = plt.subplots(figsize=(15, 10), dpi=800)
 # Plot all cells from both datasets
 neighours_fig.scatter(coords1[:, 0], coords1[:, 1], c='blue', label='adata1', alpha=0.5, s=0.2, linewidths=0.3)
 neighours_fig.scatter(coords2[:, 0], coords2[:, 1], c='red', label='adata2', alpha=0.5, s=0.2, linewidths=0.3)
-# for cell_Idx, cell_coord in enumerate(coords1):
-#     neighours_fig.annotate(cell_Idx, (cell_coord[0], cell_coord[1]), fontsize=4)
+
+label_cells = False
+if label_cells:
+    for cell_Idx, cell_coord in enumerate(coords1):
+        neighours_fig.annotate(cell_Idx, (cell_coord[0], cell_coord[1]), fontsize=4)
 
 # Create matrix of gene expression x cells
-expression_matrix1 = adata1.X
-expression_matrix2 = adata2.X
+expression_matrix1 = adata1.X.toarray()
+expression_matrix2 = adata2.X.toarray()
+# expression_matrix1 = adata2.X
+# expression_matrix2 = adata2.X
 
 # Create matrix to hold all distances to each pair in adata2
-# distances_matrix = np.full((coords1.shape[0], coords2.shape[0]), fill_value=32767, dtype=np.int16)
 distances_matrix = lil_matrix((coords1.size, coords2.size))
-
-
-def weighted_distance(distance, scale):
-    """
-    Applies an exponential weighting-up to the input distance, asymptotically approaching the max_distance.
-    Scale adjusts the rate of growth.
-
-    Higher scale more gradually increases the weighted distance
-    Lower scale has less effect on lower distances, more effect on higher distances
-    """
-
-    # Apply exponential growth function
-    return distance_threshold * (1 - math.exp(-distance / (scale * distance_threshold)))
 
 print("Calculating Distances...")
 time2 = time.time()
@@ -127,8 +122,9 @@ for cell_idx in range(0, len(coords1)):
         expression_distance = expression_distances[idx]
         if spatial_distance > 0 and expression_distance > 0:
             distances_matrix[cell_idx, neighbour_indices[cell_idx][idx]] = round(np.add(
-                weighted_distance(spatial_distance, 1.5) * 1000, expression_distance / 30000))
+                weighted_distance(spatial_distance, 1.5) * 10, expression_distance / 1))
 
+        # # Print results for debugging
         # print(f"\nCell {cell_idx} from adata1 to Cell {neighbour_indices[cell_idx][idx]} from adata2:\n"
         #       f"Calced Distance: {distances_matrix[cell_idx, neighbour_indices[cell_idx][idx]]}\n"
         #       # f"Exp Coords1: {','.join(map(str, expression_matrix1[cell_idx]))}\n"
@@ -140,22 +136,10 @@ for cell_idx in range(0, len(coords1)):
 
 print(f" Time to Calculate Euclidian Distances: {time.time() - time2}s")
 
-# ############### MULTIPLE MAPPING ALLOWED METHOD ################
-# # Draw red line for lowest expression Euclidean distance match
-# for idx, cell_id1 in enumerate(adata1.obs_names):
-#     # Get index of the closest neighbor
-#     closest_neighbor_idx = np.argmin(physical_distances[idx, :])
-#     if physical_distances[idx, closest_neighbor_idx] != 2147483647:
-#         cell_coords1 = coords1[idx, :]
-#         cell_coords2 = coords2[closest_neighbor_idx, :]
-#
-#         # Plot red line for the closest neighbor
-#         neighours_fig.plot([cell_coords1[0], cell_coords2[0]], [cell_coords1[1], cell_coords2[1]], 'r-', lw=0.5)
-# # TODO: Add save to disk functionality
-
-################# Linear sum assingment method (no multiple mapping allowed) ################
+################# Linear sum assignment method (no multiple mapping allowed) ################
 logger.info("Finding best matches...")
-coo_distances_matrix = distances_matrix.tocoo() * -1
+# coo_distances_matrix = distances_matrix.tocoo() * -1
+coo_distances_matrix = distances_matrix.tocoo()
 match_struct = sslap.auction_solve(coo_mat=coo_distances_matrix, problem='min', cardinality_check=False)
 matches = match_struct["sol"]
 logger.info("Linear Sum Assignment solution:")
@@ -175,12 +159,6 @@ for idx in range(len(matches)):
 # # Write matches to disk
 print(f"Unmatched Cells: {unmatched_cells}")
 np.save('matches.npy', matches)
-# matches_array_length = max(len(adata1_match_idx), len(adata2_match_idx))
-# with open('matches.txt', 'w') as file:
-#     for idx in range(matches_array_length):
-#         elem1 = adata1_match_idx[idx] if idx < len(adata1_match_idx) else None
-#         elem2 = adata2_match_idx[idx] if idx < len(adata2_match_idx) else None
-#         file.write(f"{elem1} {elem2}\n")
 
 # Add labels and legend
 neighours_fig.set_xlabel('X Coordinate')

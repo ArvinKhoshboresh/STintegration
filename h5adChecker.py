@@ -1,6 +1,9 @@
 import anndata
 import sys
 import scanpy as sc
+import numpy as np
+
+np.set_printoptions(edgeitems=30)
 
 # Load the h5ad file
 h5ad_path = sys.argv[1]
@@ -8,37 +11,43 @@ adata = sc.read_h5ad(h5ad_path)
 
 print(adata)
 
-# Extract spatial coordinates
-coords1 = adata.obsm['X_spatial']
+# Print the spatial data
+print(f"Gene Matrix Type : {type(adata.obs.CCF_AP_axis)}")
+print("ap axis (adata.obs.CCF_AP_axis):")
+print(adata.obs.CCF_AP_axis)
 
-# Print the gene matrix
-print("Coords (X_spatial):")
-print(adata.X)
+# Print the spatial data
+print(f"Gene Matrix Type : {type(adata.obs.CCF_ML_axis)}")
+print("ap axis (adata.obs.CCF_ML_axis):")
+print(adata.obs.CCF_ML_axis)
 
-# Create matrix of gene expression x cells
-expression_matrix1 = adata.X
+# Print the spatial data
+print(f"Gene Matrix Type : {type(adata.obs.CCF_DV_axis)}")
+print("ap axis (adata.obs.CCF_DV_axis):")
+print(adata.obs.CCF_DV_axis)
 
-# Print the gene matrix
-print("Gene Matrix (adata.X):")
-print(adata.X)
+# Extract the columns from the 'obs' DataFrame
+x = adata.obs['CCF_AP_axis'].values
+y = adata.obs['CCF_ML_axis'].values
+z = adata.obs['CCF_DV_axis'].values
 
-# Print cluster annotations if they exist
-if 'clusters' in adata.obs:
-    print("\nCluster Annotations (adata.obs['clusters']):")
-    print(adata.obs['clusters'])
-else:
-    print("\nCluster Annotations not found in adata.obs")
+print(f"X- min:{min(x)} max:{max(x)} ")
+print(f"Y- min:{min(y)} max:{max(y)} ")
+print(f"Z- min:{min(z)} max:{max(z)} ")
 
-# Print spatial coordinates if they exist
-if 'spatial' in adata.obsm:
-    print("\nSpatial Coordinates (adata.obsm['spatial']):")
-    print(adata.obsm['spatial'])
-else:
-    print("\nSpatial Coordinates not found in adata.obsm")
+# # Combine these columns into a single matrix
+# xyz_matrix = np.vstack((x, y, z)).T
+#
+# print(xyz_matrix)
 
-# For spatial coordinates with xyz
-if 'xyz' in adata.obsm:
-    print("\nXYZ Spatial Coordinates (adata.obsm['xyz']):")
-    print(adata.obsm['xyz'])
-else:
-    print("\nXYZ Spatial Coordinates not found in adata.obsm")
+# adata.obs.CCF_AP_axis.to_csv("series", sep=',', encoding='utf-8')
+
+# # Print the gene matrix
+# print(f"Gene Matrix Type : {type(adata.X)}")
+# print("Gene Matrix (adata.X):")
+# print(adata.X.todense())
+#
+# # Print the gene list
+# print(f"Gene Matrix Type : {type(adata.var)}")
+# print("Gene Matrix (adata.var):")
+# print(adata.var)
