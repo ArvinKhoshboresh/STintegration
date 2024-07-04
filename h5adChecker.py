@@ -8,6 +8,12 @@ adata = sc.read_h5ad(h5ad_path)
 
 print(adata)
 
+# Extract spatial coordinates
+coords1 = adata.obsm['X_spatial']
+
+# Create matrix of gene expression x cells
+expression_matrix1 = adata.X
+
 # Print the gene matrix
 print("Gene Matrix (adata.X):")
 print(adata.X)
