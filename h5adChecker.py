@@ -15,7 +15,7 @@ coords1 = adata.obsm['X_spatial']
 print("Coords (X_spatial):")
 print(adata.X)
 
-# Create matrix of gene expression x cells
+# Create matrix of gene expression x cell
 expression_matrix1 = adata.X
 
 # Print the gene matrix
