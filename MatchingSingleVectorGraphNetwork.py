@@ -165,8 +165,8 @@ print(f"Edge Weights: {edge_weights}")
 print(f"Num Vertices: {num_vertices}")
 
 # Create PyTorch tensor for weights
-weights = torch.tensor(edge_weights).unsqueeze(0)  # Add batch dimension
-lambda_val = 0.1  # Example hyperparameter, adjust as needed
+weights = torch.tensor(edge_weights).unsqueeze(0)
+lambda_val = 1
 
 matches = perfect_matching.min_cost_perfect_matching(edges, edge_weights, num_vertices)
 
