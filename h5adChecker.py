@@ -24,7 +24,7 @@ for index, row in adata.obs[columns_to_extract].iterrows():
     print(f"Row {index}: {row.to_dict()}")
 
 # Create a list of all unique CCFano entries
-unique_ccfano = adata.obs['CCFano'].unique().tolist()
+unique_ccfano = adata.obs['CCFname'].unique().tolist()
 
 # Print the unique CCFano entries
 print("Unique CCFano entries:")
