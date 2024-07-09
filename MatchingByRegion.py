@@ -8,9 +8,8 @@ import numpy as np
 import math
 import sys
 import sslap
-
 import PlotFromMatches
-
+import matplotlib.pyplot as plt
 
 def extract_coords(adata):
     """
@@ -42,11 +41,30 @@ def weighted_distance(distance, scale):
 
 def match(adata1, adata2):
 
+    logger.info(f"Calculating matches for region: {adata1[0].obs['CCFname']}")
+
     # Extract spatial coordinates
     coords1 = extract_coords(adata1)
     coords2 = extract_coords(adata2)
     # coords1 = adata1.obsm['X_spatial']
     # coords2 = adata2.obsm['X_spatial']
+
+
+
+    # Create plot
+    fig, neighours_fig = plt.subplots(figsize=(15, 10), dpi=800)
+    # Plot all cells from both datasets
+    neighours_fig.scatter(coords1[:, 0], coords1[:, 1], c='blue', label='adata1', alpha=0.5, s=0.2, linewidths=0.3)
+    neighours_fig.scatter(coords2[:, 0], coords2[:, 1], c='red', label='adata2', alpha=0.5, s=0.2, linewidths=0.3)
+    for cell_Idx, cell_coord in enumerate(coords1):
+        neighours_fig.annotate(adata1.obs['slice'][cell_Idx], (cell_coord[0], cell_coord[1]), fontsize=1)
+    for cell_Idx, cell_coord in enumerate(coords2):
+        neighours_fig.annotate(adata2.obs['slice'][cell_Idx], (cell_coord[0], cell_coord[1]), fontsize=1)
+    neighours_fig.set_xlabel('X Coordinate')
+    neighours_fig.set_ylabel('Y Coordinate')
+    plt.savefig('graph.png', bbox_inches='tight')
+
+
 
     # Construct KDTree for both AnnData objects
     kdtree1 = KDTree(coords1)
@@ -58,7 +76,7 @@ def match(adata1, adata2):
     # Find average number of neighbours
     total_items = sum(len(lst) for lst in neighbour_indices)
     number_of_lists = len(neighbour_indices)
-    print(f"Average number of neighbours: {total_items / number_of_lists}")
+    logger.info(f"Average number of neighbours: {total_items / number_of_lists}")
 
     # Create matrix of gene expression x cells
     expression_matrix1 = adata1.X.toarray()
@@ -69,7 +87,7 @@ def match(adata1, adata2):
     # Create matrix to hold all distances to each pair in adata2
     distances_matrix = lil_matrix((coords1.size, coords2.size))
 
-    print("Calculating Distances...")
+    logger.info("Calculating Distances...")
     time2 = time.time()
     for cell_idx in range(0, len(coords1)):
         neighbours_physical_matrix = numpy.zeros((len(neighbour_indices[cell_idx]), len(coords2[0])))
@@ -105,7 +123,7 @@ def match(adata1, adata2):
             #       f"Spt Coords2: {','.join(map(str, coords2[neighbour_indices[cell_idx][idx]]))}\n"
             #       f"Calced Spt Distance: {physical_distances[idx]}\n")
 
-    print(f" Time to Calculate Euclidian Distances: {time.time() - time2}s")
+    logger.info(f" Time to Calculate Euclidian Distances: {time.time() - time2}s")
 
     ################# Linear sum assignment method (no multiple mapping allowed) ################
     logger.info("Finding best matches...")
@@ -114,20 +132,20 @@ def match(adata1, adata2):
     matches = match_struct["sol"]
 
     # logger.info("Linear Sum Assignment solution:")
-    # print(matches)
+    # logger.info(matches)
 
-    return matches
+    return list(matches)
 
 
 start_time = time.time()
 
 logger = logging.getLogger('logger')
 grey = "\x1b[38;20m"
-logging.basicConfig(level=logging.INFO, format="\x1b[38;20m" + "%(message)s")
+logging.basicConfig(level=logging.INFO, format=grey + "%(message)s")
 np.set_printoptions(edgeitems=20)
 
 # Define constants
-distance_threshold = 3.5  # In CCF units
+distance_threshold = 10  # In CCF units
 
 # Load AnnData objects
 adata1_path = sys.argv[1]
@@ -139,16 +157,21 @@ full_adata2 = sc.read_h5ad(adata2_path)
 logger.info(full_adata1)
 logger.info(full_adata2)
 
-brain_regions1 = full_adata1.obs.groupby("CCFname")
-brain_regions2 = full_adata2.obs.groupby("CCFname")
+brain_regions1 = full_adata1.obs.groupby("CCFano")
+brain_regions2 = full_adata2.obs.groupby("CCFano")
 
-common_ccfnames = set(brain_regions1.groups.keys()).intersection(set(brain_regions2.groups.keys()))
+common_categories = sorted(set(brain_regions1.groups.keys()).intersection(set(brain_regions2.groups.keys())))
 
 matches = []
+for category in common_categories:
 
-# Iterate over common CCFname values and apply do_work function to matched groups
-for ccfname in common_ccfnames:
-    matches += match(brain_regions1.get_group(ccfname), brain_regions2.get_group(ccfname))
+    indices1 = brain_regions1.groups[category]
+    indices2 = brain_regions2.groups[category]
+
+    adata1_subset = full_adata1[indices1]
+    adata2_subset = full_adata2[indices2]
+
+    matches += match(adata1_subset, adata2_subset)
 
 unmatched_cells = 0
 for idx in range(len(matches)):
@@ -158,7 +181,7 @@ for idx in range(len(matches)):
         logger.info(f"REMOVED: {idx} {matches[idx]}")
         matches.pop(idx)
         unmatched_cells += 1
-print(f"Unmatched Cells: {unmatched_cells}")
+logger.info(f"Unmatched Cells: {unmatched_cells}")
 
 # # Write matches to disk
 np.save('matches.npy', matches)

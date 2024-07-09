@@ -3,6 +3,7 @@ import sys
 import logging
 import matplotlib.pyplot as plt
 import scanpy as sc
+import MatchingByRegion
 
 
 def euclidean_distance(point1, point2):
@@ -14,8 +15,10 @@ def plot(adata1, adata2, matches, threshold):
     print("Started plotting...")
 
     # Extract spatial coordinates
-    coords1 = adata1.obsm['X_spatial']
-    coords2 = adata2.obsm['X_spatial']
+    coords1 = MatchingByRegion.extract_coords(adata1)
+    coords2 = MatchingByRegion.extract_coords(adata2)
+    # coords1 = adata1.obsm['X_spatial']
+    # coords2 = adata2.obsm['X_spatial']
 
     # Create plot
     fig, neighours_fig = plt.subplots(figsize=(15, 10), dpi=800)
@@ -70,12 +73,6 @@ logger.info(full_adata1)
 logger.info(full_adata2)
 
 distance_threshold = 3.5
-
-# Check if spatial coordinates are present in both AnnData objects
-if 'X_spatial' not in full_adata1.obsm:
-    raise ValueError("Spatial coordinates not found in adata1.obsm['X_spatial']")
-if 'X_spatial' not in full_adata2.obsm:
-    raise ValueError("Spatial coordinates not found in adata2.obsm['X_spatial']")
 
 # Load arrays from disk
 loaded_matches = np.load('matches.npy')
