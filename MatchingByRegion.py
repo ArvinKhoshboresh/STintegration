@@ -8,7 +8,6 @@ import numpy as np
 import math
 import sys
 import sslap
-import PlotFromMatches
 import matplotlib.pyplot as plt
 
 def extract_coords(adata):
@@ -27,7 +26,7 @@ def extract_coords(adata):
     z = adata.obs['CCF_DV_axis'].values
     return np.vstack((x, y, z)).T
 
-def weighted_distance(distance, scale):
+def weighted_distance(distance, scale, max_distance):
     """
     Applies an exponential weighting-up to the input distance, asymptotically approaching the max_distance.
     Scale adjusts the rate of growth.
@@ -37,7 +36,11 @@ def weighted_distance(distance, scale):
     """
 
     # Apply exponential growth function
-    return distance_threshold * (1 - math.exp(-distance / (scale * distance_threshold)))
+    return max_distance * (1 - math.exp(-distance / (scale * max_distance)))
+
+def euclidean_distance(point1, point2):
+    return np.sqrt(np.sum((point1 - point2) ** 2))
+
 
 def match(adata1, adata2):
 
@@ -46,43 +49,38 @@ def match(adata1, adata2):
     # Extract spatial coordinates
     coords1 = extract_coords(adata1)
     coords2 = extract_coords(adata2)
-    # coords1 = adata1.obsm['X_spatial']
-    # coords2 = adata2.obsm['X_spatial']
 
+    # # Plot this region in Coronal view
+    # fig, neighours_fig = plt.subplots(figsize=(15, 10), dpi=800)
+    # # Plot all cells from both datasets
+    # neighours_fig.scatter(coords1[:, 2], coords1[:, 1], c='blue', label='adata1', alpha=0.5, s=0.2, linewidths=0.3)
+    # neighours_fig.scatter(coords2[:, 2], coords2[:, 1], c='red', label='adata2', alpha=0.5, s=0.2, linewidths=0.3)
+    # # for cell_Idx, cell_coord in enumerate(coords1):
+    # #     neighours_fig.annotate(adata1.obs['slice'][cell_Idx], (cell_coord[2], cell_coord[1]), fontsize=1)
+    # # for cell_Idx, cell_coord in enumerate(coords2):
+    # #     neighours_fig.annotate(adata2.obs['slice'][cell_Idx], (cell_coord[2], cell_coord[1]), fontsize=1)
+    # neighours_fig.set_xlabel('Z Coordinate')
+    # neighours_fig.set_ylabel('Y Coordinate')
+    # plt.savefig('graph.png', bbox_inches='tight')
 
-
-    # Create plot
-    fig, neighours_fig = plt.subplots(figsize=(15, 10), dpi=800)
     # Plot all cells from both datasets
     neighours_fig.scatter(coords1[:, 0], coords1[:, 1], c='blue', label='adata1', alpha=0.5, s=0.2, linewidths=0.3)
     neighours_fig.scatter(coords2[:, 0], coords2[:, 1], c='red', label='adata2', alpha=0.5, s=0.2, linewidths=0.3)
-    for cell_Idx, cell_coord in enumerate(coords1):
-        neighours_fig.annotate(adata1.obs['slice'][cell_Idx], (cell_coord[0], cell_coord[1]), fontsize=1)
-    for cell_Idx, cell_coord in enumerate(coords2):
-        neighours_fig.annotate(adata2.obs['slice'][cell_Idx], (cell_coord[0], cell_coord[1]), fontsize=1)
-    neighours_fig.set_xlabel('X Coordinate')
-    neighours_fig.set_ylabel('Y Coordinate')
-    plt.savefig('graph.png', bbox_inches='tight')
-
-
+    label_cells = False
+    if label_cells:
+        for cell_Idx, cell_coord in enumerate(coords1):
+            neighours_fig.annotate(cell_Idx, (cell_coord[0], cell_coord[1]), fontsize=4)
 
     # Construct KDTree for both AnnData objects
-    kdtree1 = KDTree(coords1)
     kdtree2 = KDTree(coords2)
-
-    # Use query_ball_tree to find neighboring cells
-    neighbour_indices = kdtree1.query_ball_tree(kdtree2, distance_threshold)
-
-    # Find average number of neighbours
-    total_items = sum(len(lst) for lst in neighbour_indices)
-    number_of_lists = len(neighbour_indices)
-    logger.info(f"Average number of neighbours: {total_items / number_of_lists}")
+    # Find neighboring cells
+    distance_to_neighbours, neighbour_indices = kdtree2.query(coords1, k=num_neighbours)
+    # Find distance_threshold for every point in coords1
+    distance_thresholds = distance_to_neighbours[:, -1]
 
     # Create matrix of gene expression x cells
     expression_matrix1 = adata1.X.toarray()
     expression_matrix2 = adata2.X.toarray()
-    # expression_matrix1 = adata2.X
-    # expression_matrix2 = adata2.X
 
     # Create matrix to hold all distances to each pair in adata2
     distances_matrix = lil_matrix((coords1.size, coords2.size))
@@ -111,7 +109,8 @@ def match(adata1, adata2):
             expression_distance = expression_distances[idx]
             if spatial_distance > 0 and expression_distance > 0:
                 distances_matrix[cell_idx, neighbour_indices[cell_idx][idx]] = round(np.add(
-                    weighted_distance(spatial_distance, 1.5) * 10, expression_distance / 1))
+                    weighted_distance(spatial_distance, 1.5, distance_thresholds[cell_idx]) * 10,
+                    expression_distance / 1))
 
             # # Print results for debugging
             # print(f"\nCell {cell_idx} from adata1 to Cell {neighbour_indices[cell_idx][idx]} from adata2:\n"
@@ -131,10 +130,32 @@ def match(adata1, adata2):
     match_struct = sslap.auction_solve(coo_mat=coo_distances_matrix, problem='min', cardinality_check=False)
     matches = match_struct["sol"]
 
-    # logger.info("Linear Sum Assignment solution:")
-    # logger.info(matches)
+    logger.info("Linear Sum Assignment solution:")
+    logger.info(matches)
+
+    valid_matches = [match for idx in range(len(matches)) if not valid_match(matches[idx,
+                                                                             coords1[idx, :]],
+                                                                             coords2[matches[idx], :],
+                                                                             distance_thresholds[idx])]
+    logger.info("valid matches:")
+    logger.info(valid_matches)
+
+    removed_cells = len(matches) - len(valid_matches)
+    logger.info(f"Removed Cells: {removed_cells}")
+
+    for idx in range(len(matches)):
+        logger.info(f"{idx} {matches[idx]}")
+        cell_coords1 = coords1[idx, :]
+        cell_coords2 = coords2[matches[idx], :]
+        neighours_fig.plot([cell_coords1[0], cell_coords2[0]], [cell_coords1[1], cell_coords2[1]], 'r-',lw=0.03)
 
     return list(matches)
+
+def valid_match(failed_match, cell_coords1, cell_coords2, threshold):
+    if failed_match == -1: return False
+    distance = euclidean_distance(cell_coords1, cell_coords2)
+    if distance < threshold: return True
+    else: return False
 
 
 start_time = time.time()
@@ -146,6 +167,7 @@ np.set_printoptions(edgeitems=20)
 
 # Define constants
 distance_threshold = 10  # In CCF units
+num_neighbours = 50
 
 # Load AnnData objects
 adata1_path = sys.argv[1]
@@ -157,8 +179,26 @@ full_adata2 = sc.read_h5ad(adata2_path)
 logger.info(full_adata1)
 logger.info(full_adata2)
 
-brain_regions1 = full_adata1.obs.groupby("CCFano")
-brain_regions2 = full_adata2.obs.groupby("CCFano")
+# # Plot the whole brain in 3d
+# fig = plt.figure(figsize=(15, 10), dpi=900)
+# neighours_fig = fig.add_subplot(111, projection='3d')
+# # Plot all cells from both datasets
+# coords1 = extract_coords((full_adata1))
+# coords2 = extract_coords((full_adata2))
+# neighours_fig.scatter(coords1[:, 0], coords1[:, 1], coords1[:, 2], c='blue', label='adata1', alpha=0.5, s=0.05,linewidths=0.05)
+# neighours_fig.scatter(coords2[:, 0], coords2[:, 1], coords2[:, 2], c='red', label='adata2', alpha=0.5, s=0.05,linewidths=0.05)
+# neighours_fig.set_xlabel('X Coordinate')
+# neighours_fig.set_ylabel('Y Coordinate')
+# neighours_fig.set_zlabel('Z Coordinate')
+# neighours_fig.legend()
+# plt.savefig(f'{time.time()}_graph.png', bbox_inches='tight')
+# print("Big Plotting done")
+
+# Create plot
+fig, neighours_fig = plt.subplots(figsize=(15, 10), dpi=800)
+
+brain_regions1 = full_adata1.obs.groupby("CCFname")
+brain_regions2 = full_adata2.obs.groupby("CCFname")
 
 common_categories = sorted(set(brain_regions1.groups.keys()).intersection(set(brain_regions2.groups.keys())))
 
@@ -173,20 +213,14 @@ for category in common_categories:
 
     matches += match(adata1_subset, adata2_subset)
 
-unmatched_cells = 0
-for idx in range(len(matches)):
-    if not matches[idx] == -1:
-        logger.info(f"{idx} {matches[idx]}")
-    else:
-        logger.info(f"REMOVED: {idx} {matches[idx]}")
-        matches.pop(idx)
-        unmatched_cells += 1
-logger.info(f"Unmatched Cells: {unmatched_cells}")
-
 # # Write matches to disk
 np.save('matches.npy', matches)
 
-PlotFromMatches.plot(full_adata1, full_adata2, matches, distance_threshold)
+neighours_fig.set_xlabel('X Coordinate')
+neighours_fig.set_ylabel('Y Coordinate')
+neighours_fig.legend()
+plt.savefig('matches.png', bbox_inches='tight')
+print("Plotting Done.")
 
 # ################## UMAP Matching #################
 # # UMAPs are already computed in main.py
