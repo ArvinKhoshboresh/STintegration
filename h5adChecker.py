@@ -11,25 +11,27 @@ adata = sc.read_h5ad(h5ad_path)
 
 print(adata)
 
-# Extract the specified columns from obs
-columns_to_extract = ['CCFano', 'CCFname', 'clustid', 'clustname', 'subclass']
+print(adata[0])
 
-# Ensure the columns exist in the obs DataFrame
-for col in columns_to_extract:
-    if col not in adata.obs.columns:
-        raise KeyError(f"Column '{col}' not found in the AnnData object's obs attribute.")
-
-# Print the values for each row
-for index, row in adata.obs[columns_to_extract].iterrows():
-    print(f"Row {index}: {row.to_dict()}")
-
-# Create a list of all unique CCFano entries
-unique_ccfano = adata.obs['CCFname'].unique().tolist()
-
-# Print the unique CCFano entries
-print("Unique CCFano entries:")
-for entry in unique_ccfano:
-    print(entry)
+# # Extract the specified columns from obs
+# columns_to_extract = ['CCFano', 'CCFname', 'clustid', 'clustname', 'subclass']
+#
+# # Ensure the columns exist in the obs DataFrame
+# for col in columns_to_extract:
+#     if col not in adata.obs.columns:
+#         raise KeyError(f"Column '{col}' not found in the AnnData object's obs attribute.")
+#
+# # Print the values for each row
+# for index, row in adata.obs[columns_to_extract].iterrows():
+#     print(f"Row {index}: {row.to_dict()}")
+#
+# # Create a list of all unique CCFano entries
+# unique_ccfano = adata.obs['CCFname'].unique().tolist()
+#
+# # Print the unique CCFano entries
+# print("Unique CCFano entries:")
+# for entry in unique_ccfano:
+#     print(entry)
 
 # # Print the spatial data
 # print(f"Gene Matrix Type : {type(adata.obs.CCF_AP_axis)}")

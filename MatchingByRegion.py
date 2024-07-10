@@ -64,8 +64,8 @@ def match(adata1, adata2):
     # plt.savefig('graph.png', bbox_inches='tight')
 
     # Plot all cells from both datasets
-    neighours_fig.scatter(coords1[:, 0], coords1[:, 1], c='blue', label='adata1', alpha=0.5, s=0.2, linewidths=0.3)
-    neighours_fig.scatter(coords2[:, 0], coords2[:, 1], c='red', label='adata2', alpha=0.5, s=0.2, linewidths=0.3)
+    neighours_fig.scatter(coords1[:, 2], coords1[:, 1], c='blue', label='adata1', alpha=0.5, s=0.2, linewidths=0.2)
+    neighours_fig.scatter(coords2[:, 2], coords2[:, 1], c='red', label='adata2', alpha=0.5, s=0.2, linewidths=0.2)
     label_cells = False
     if label_cells:
         for cell_Idx, cell_coord in enumerate(coords1):
@@ -131,30 +131,32 @@ def match(adata1, adata2):
     matches = match_struct["sol"]
 
     logger.info("Linear Sum Assignment solution:")
-    logger.info(matches)
 
-    valid_matches = [match for idx in range(len(matches)) if not valid_match(matches[idx,
-                                                                             coords1[idx, :]],
-                                                                             coords2[matches[idx], :],
-                                                                             distance_thresholds[idx])]
-    logger.info("valid matches:")
+    valid_matches = list()
+
+    for idx in range(len(matches)):
+        logger.info(f"{idx} {matches[idx]}, Distance: {distance_to_neighbours[np.where(neighbour_indices[idx] == matches[idx])]}")
+        cell_coords1 = coords1[idx, :]
+        cell_coords2 = coords2[matches[idx], :]
+        if valid_match(matches[idx], cell_coords1, cell_coords2, distance_thresholds[idx]):
+            neighours_fig.plot([cell_coords1[2], cell_coords2[2]], [cell_coords1[1], cell_coords2[1]], 'r-',lw=0.03)
+            valid_matches.append((idx, matches[idx]))
+        else:
+            logger.info("Removed cell.")
+
     logger.info(valid_matches)
 
     removed_cells = len(matches) - len(valid_matches)
     logger.info(f"Removed Cells: {removed_cells}")
 
-    for idx in range(len(matches)):
-        logger.info(f"{idx} {matches[idx]}")
-        cell_coords1 = coords1[idx, :]
-        cell_coords2 = coords2[matches[idx], :]
-        neighours_fig.plot([cell_coords1[0], cell_coords2[0]], [cell_coords1[1], cell_coords2[1]], 'r-',lw=0.03)
+    plt.savefig('matches.png', bbox_inches='tight')
 
-    return list(matches)
+    return valid_matches
 
 def valid_match(failed_match, cell_coords1, cell_coords2, threshold):
     if failed_match == -1: return False
     distance = euclidean_distance(cell_coords1, cell_coords2)
-    if distance < threshold: return True
+    if distance < threshold and distance < absolute_distance_threshold: return True
     else: return False
 
 
@@ -166,7 +168,7 @@ logging.basicConfig(level=logging.INFO, format=grey + "%(message)s")
 np.set_printoptions(edgeitems=20)
 
 # Define constants
-distance_threshold = 10  # In CCF units
+absolute_distance_threshold = 100  # In CCF units
 num_neighbours = 50
 
 # Load AnnData objects
@@ -195,7 +197,7 @@ logger.info(full_adata2)
 # print("Big Plotting done")
 
 # Create plot
-fig, neighours_fig = plt.subplots(figsize=(15, 10), dpi=800)
+fig, neighours_fig = plt.subplots(figsize=(15, 10), dpi=900)
 
 brain_regions1 = full_adata1.obs.groupby("CCFname")
 brain_regions2 = full_adata2.obs.groupby("CCFname")
