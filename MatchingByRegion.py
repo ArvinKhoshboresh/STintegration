@@ -46,6 +46,9 @@ def match(adata1, adata2):
 
     logger.info(f"Calculating matches for region: {adata1[0].obs['CCFname']}")
 
+    print(adata1)
+    print(adata2)
+
     # Extract spatial coordinates
     coords1 = extract_coords(adata1)
     coords2 = extract_coords(adata2)
