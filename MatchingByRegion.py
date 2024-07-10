@@ -135,7 +135,8 @@ def match(adata1, adata2):
     valid_matches = list()
 
     for idx in range(len(matches)):
-        logger.info(f"{idx} {matches[idx]}, Distance: {distance_to_neighbours[np.where(neighbour_indices[idx] == matches[idx])]}")
+        logger.info(f"{idx} {matches[idx]}, "
+                    f"Distance: {distance_to_neighbours[idx, np.where(neighbour_indices[idx] == matches[idx])]}")
         cell_coords1 = coords1[idx, :]
         cell_coords2 = coords2[matches[idx], :]
         if valid_match(matches[idx], cell_coords1, cell_coords2, distance_thresholds[idx]):
@@ -148,6 +149,7 @@ def match(adata1, adata2):
 
     removed_cells = len(matches) - len(valid_matches)
     logger.info(f"Removed Cells: {removed_cells}")
+    total_removed_cells =+ removed_cells
 
     plt.savefig('matches.png', bbox_inches='tight')
 
@@ -205,6 +207,7 @@ brain_regions2 = full_adata2.obs.groupby("CCFname")
 common_categories = sorted(set(brain_regions1.groups.keys()).intersection(set(brain_regions2.groups.keys())))
 
 matches = []
+total_removed_cells = 0
 for category in common_categories:
 
     indices1 = brain_regions1.groups[category]
@@ -214,6 +217,8 @@ for category in common_categories:
     adata2_subset = full_adata2[indices2]
 
     matches += match(adata1_subset, adata2_subset)
+
+print(f"Total removed cells: {total_removed_cells}")
 
 # # Write matches to disk
 np.save('matches.npy', matches)
