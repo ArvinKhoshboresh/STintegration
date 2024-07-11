@@ -46,9 +46,6 @@ def match(adata1, adata2):
 
     logger.info(f"Calculating matches for region: {adata1[0].obs['CCFname']}")
 
-    print(adata1)
-    print(adata2)
-
     # Extract spatial coordinates
     coords1 = extract_coords(adata1)
     coords2 = extract_coords(adata2)
@@ -112,7 +109,7 @@ def match(adata1, adata2):
             expression_distance = expression_distances[idx]
             if spatial_distance > 0 and expression_distance > 0:
                 distances_matrix[cell_idx, neighbour_indices[cell_idx][idx]] = round(np.add(
-                    weighted_distance(spatial_distance, 1.5, distance_thresholds[cell_idx]) * 10,
+                    weighted_distance(spatial_distance, 1, distance_thresholds[cell_idx]) * 10,
                     expression_distance / 1))
 
             # # Print results for debugging
@@ -139,7 +136,8 @@ def match(adata1, adata2):
 
     for idx in range(len(matches)):
         logger.info(f"{idx} {matches[idx]}, "
-                    f"Distance: {distance_to_neighbours[idx, np.where(neighbour_indices[idx] == matches[idx])]}")
+                    f"Distance: {distance_to_neighbours[idx, np.where(neighbour_indices[idx] == matches[idx])]}"
+                    f"Threshold: {distance_thresholds[idx]}")
         cell_coords1 = coords1[idx, :]
         cell_coords2 = coords2[matches[idx], :]
         if valid_match(matches[idx], cell_coords1, cell_coords2, distance_thresholds[idx]):
@@ -161,7 +159,7 @@ def match(adata1, adata2):
 def valid_match(failed_match, cell_coords1, cell_coords2, threshold):
     if failed_match == -1: return False
     distance = euclidean_distance(cell_coords1, cell_coords2)
-    if distance < threshold and distance < absolute_distance_threshold: return True
+    if distance < threshold and distance <= absolute_distance_threshold: return True
     else: return False
 
 
@@ -174,7 +172,7 @@ np.set_printoptions(edgeitems=20)
 
 # Define constants
 absolute_distance_threshold = 100  # In CCF units
-num_neighbours = 50
+num_neighbours = 25
 
 # Load AnnData objects
 adata1_path = sys.argv[1]
@@ -209,7 +207,6 @@ brain_regions2 = full_adata2.obs.groupby("CCFname")
 
 common_categories = sorted(set(brain_regions1.groups.keys()).intersection(set(brain_regions2.groups.keys())))
 
-matches = []
 total_removed_cells = 0
 for category in common_categories:
 
@@ -219,12 +216,14 @@ for category in common_categories:
     adata1_subset = full_adata1[indices1]
     adata2_subset = full_adata2[indices2]
 
-    matches += match(adata1_subset, adata2_subset)
+    logger.info(adata1_subset)
+    logger.info(adata2_subset)
+    matches = match(adata1_subset, adata2_subset)
 
 print(f"Total removed cells: {total_removed_cells}")
 
 # # Write matches to disk
-np.save('matches.npy', matches)
+# np.save('matches.npy', matches)
 
 neighours_fig.set_xlabel('X Coordinate')
 neighours_fig.set_ylabel('Y Coordinate')
