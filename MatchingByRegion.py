@@ -44,8 +44,6 @@ def euclidean_distance(point1, point2):
 
 def match(adata1, adata2):
 
-    logger.info(f"Calculating matches for region: {adata1[0].obs['CCFname']}")
-
     # Extract spatial coordinates
     coords1 = extract_coords(adata1)
     coords2 = extract_coords(adata2)
@@ -71,10 +69,12 @@ def match(adata1, adata2):
         for cell_Idx, cell_coord in enumerate(coords1):
             neighours_fig.annotate(cell_Idx, (cell_coord[0], cell_coord[1]), fontsize=4)
 
-    # Construct KDTree for both AnnData objects
+    # Construct KDTree for AnnData objects
     kdtree2 = KDTree(coords2)
     # Find neighboring cells
-    distance_to_neighbours, neighbour_indices = kdtree2.query(coords1, k=num_neighbours)
+    num_valid_neighbours = num_neighbours
+    if num_neighbours > len(coords2): num_valid_neighbours = len(coords2)
+    distance_to_neighbours, neighbour_indices = kdtree2.query(coords1, k=num_valid_neighbours)
     # Find distance_threshold for every point in coords1
     distance_thresholds = distance_to_neighbours[:, -1]
 
@@ -83,16 +83,19 @@ def match(adata1, adata2):
     expression_matrix2 = adata2.X.toarray()
 
     # Create matrix to hold all distances to each pair in adata2
-    distances_matrix = lil_matrix((coords1.size, coords2.size))
+    distances_matrix = lil_matrix((len(coords1), len(coords2)))
 
     logger.info("Calculating Distances...")
     time2 = time.time()
     for cell_idx in range(0, len(coords1)):
-        neighbours_physical_matrix = numpy.zeros((len(neighbour_indices[cell_idx]), len(coords2[0])))
-        neighbours_expression_matrix = numpy.zeros((len(neighbour_indices[cell_idx]), len(expression_matrix2[0])))
-        for idx, neighbour in enumerate(neighbour_indices[cell_idx]):
-            neighbours_physical_matrix[idx] = coords2[neighbour]
-            neighbours_expression_matrix[idx] = expression_matrix2[neighbour]
+        neighbours_physical_matrix = coords2[neighbour_indices[cell_idx]]
+        neighbours_expression_matrix = expression_matrix2[neighbour_indices[cell_idx]]
+
+        # neighbours_physical_matrix = numpy.zeros((len(neighbour_indices[cell_idx]), len(coords2[0])))
+        # neighbours_expression_matrix = numpy.zeros((len(neighbour_indices[cell_idx]), len(expression_matrix2[0])))
+        # for idx, neighbour in enumerate(neighbour_indices[cell_idx]):
+        #     neighbours_physical_matrix[idx] = coords2[neighbour]
+        #     neighbours_expression_matrix[idx] = expression_matrix2[neighbour]
 
         physical_vector_norm = np.sum(coords1[cell_idx] ** 2)
         physical_norm2 = np.sum(neighbours_physical_matrix ** 2, axis=1)
@@ -108,9 +111,9 @@ def match(adata1, adata2):
             spatial_distance = physical_distances[idx]
             expression_distance = expression_distances[idx]
             if spatial_distance > 0 and expression_distance > 0:
-                distances_matrix[cell_idx, neighbour_indices[cell_idx][idx]] = round(np.add(
-                    weighted_distance(spatial_distance, 1, distance_thresholds[cell_idx]) * 10,
-                    expression_distance / 1))
+                distances_matrix[cell_idx, neighbour_indices[cell_idx][idx]] = np.add(
+                    weighted_distance(spatial_distance, 0.8, distance_thresholds[cell_idx]) * 10,
+                    expression_distance / 1)
 
             # # Print results for debugging
             # print(f"\nCell {cell_idx} from adata1 to Cell {neighbour_indices[cell_idx][idx]} from adata2:\n"
@@ -124,29 +127,28 @@ def match(adata1, adata2):
 
     logger.info(f" Time to Calculate Euclidian Distances: {time.time() - time2}s")
 
-    ################# Linear sum assignment method (no multiple mapping allowed) ################
     logger.info("Finding best matches...")
-    coo_distances_matrix = distances_matrix.tocoo() * -1
-    match_struct = sslap.auction_solve(coo_mat=coo_distances_matrix, problem='min', cardinality_check=False)
+    # coo_distances_matrix = distances_matrix.tocoo() * -1
+    coo_distances_matrix = distances_matrix.tocoo()
+    match_struct = sslap.auction_solve(coo_mat=coo_distances_matrix, problem='min', cardinality_check=False, fast=True)
     matches = match_struct["sol"]
-
-    logger.info("Linear Sum Assignment solution:")
 
     valid_matches = list()
 
     for idx in range(len(matches)):
-        logger.info(f"{idx} {matches[idx]}, "
-                    f"Distance: {distance_to_neighbours[idx, np.where(neighbour_indices[idx] == matches[idx])]}"
-                    f"Threshold: {distance_thresholds[idx]}")
+        # logger.info(f"{idx} {matches[idx]}, "
+        #             f"Distance: {distance_to_neighbours[idx, np.where(neighbour_indices[idx] == matches[idx])]}, "
+        #             f"Threshold: {distance_thresholds[idx]}")
         cell_coords1 = coords1[idx, :]
         cell_coords2 = coords2[matches[idx], :]
         if valid_match(matches[idx], cell_coords1, cell_coords2, distance_thresholds[idx]):
             neighours_fig.plot([cell_coords1[2], cell_coords2[2]], [cell_coords1[1], cell_coords2[1]], 'r-',lw=0.03)
             valid_matches.append((idx, matches[idx]))
-        else:
-            logger.info("Removed cell.")
-
-    logger.info(valid_matches)
+    #     else:
+    #         logger.info("Removed cell.")
+    #
+    # logger.info("Linear Sum Assignment solution:")
+    # logger.info(valid_matches)
 
     removed_cells = len(matches) - len(valid_matches)
     logger.info(f"Removed Cells: {removed_cells}")
@@ -154,12 +156,10 @@ def match(adata1, adata2):
 
     plt.savefig('matches.png', bbox_inches='tight')
 
-    return valid_matches
-
 def valid_match(failed_match, cell_coords1, cell_coords2, threshold):
     if failed_match == -1: return False
     distance = euclidean_distance(cell_coords1, cell_coords2)
-    if distance < threshold and distance <= absolute_distance_threshold: return True
+    if distance < threshold * 1.5 and distance <= absolute_distance_threshold: return True
     else: return False
 
 
@@ -172,7 +172,7 @@ np.set_printoptions(edgeitems=20)
 
 # Define constants
 absolute_distance_threshold = 100  # In CCF units
-num_neighbours = 25
+num_neighbours = 100
 
 # Load AnnData objects
 adata1_path = sys.argv[1]
@@ -180,6 +180,22 @@ adata2_path = sys.argv[2]
 
 full_adata1 = sc.read_h5ad(adata1_path)
 full_adata2 = sc.read_h5ad(adata2_path)
+
+# Cut data into pieces for faster prototyping
+cut_data = False
+if cut_data:
+    cut_data_factor = 10
+    num_cells = full_adata1.shape[0]
+    indices = np.random.permutation(num_cells)
+    split = indices[:num_cells // cut_data_factor]
+    full_adata1 = full_adata1[split].copy()
+
+    num_cells = full_adata2.shape[0]
+    indices = np.random.permutation(num_cells)
+    split = indices[:num_cells // cut_data_factor]
+    full_adata2 = full_adata2[split].copy()
+
+    logger.info('WARNING: Data split')
 
 logger.info(full_adata1)
 logger.info(full_adata2)
@@ -200,7 +216,7 @@ logger.info(full_adata2)
 # print("Big Plotting done")
 
 # Create plot
-fig, neighours_fig = plt.subplots(figsize=(15, 10), dpi=900)
+fig, neighours_fig = plt.subplots(figsize=(15, 10), dpi=1200)
 
 brain_regions1 = full_adata1.obs.groupby("CCFname")
 brain_regions2 = full_adata2.obs.groupby("CCFname")
@@ -218,7 +234,9 @@ for category in common_categories:
 
     logger.info(adata1_subset)
     logger.info(adata2_subset)
-    matches = match(adata1_subset, adata2_subset)
+    logger.info(f"Calculating matches for region: {adata1_subset[0].obs['CCFname']}")
+
+    match(adata1_subset, adata2_subset)
 
 print(f"Total removed cells: {total_removed_cells}")
 

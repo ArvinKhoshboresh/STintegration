@@ -11,7 +11,7 @@ adata = sc.read_h5ad(h5ad_path)
 
 print(adata)
 
-print(adata[0])
+print(adata._oidx)
 
 # # Extract the specified columns from obs
 # columns_to_extract = ['CCFano', 'CCFname', 'clustid', 'clustname', 'subclass']
