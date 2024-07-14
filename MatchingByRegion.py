@@ -1,7 +1,5 @@
 import time
-import numpy
 import scanpy as sc
-import logging
 from scipy.sparse import lil_matrix
 from scipy.spatial import KDTree
 import numpy as np
@@ -44,6 +42,9 @@ def euclidean_distance(point1, point2):
 
 def match(adata1, adata2):
 
+    if len(adata1) == 1 or len(adata2) == 1: return
+    print(f"Started calculations for region {adata1[0].obs['CCFname']}...")
+
     # Extract spatial coordinates
     coords1 = extract_coords(adata1)
     coords2 = extract_coords(adata2)
@@ -85,7 +86,7 @@ def match(adata1, adata2):
     # Create matrix to hold all distances to each pair in adata2
     distances_matrix = lil_matrix((len(coords1), len(coords2)))
 
-    logger.info("Calculating Distances...")
+    print("Calculating Distances...")
     time2 = time.time()
     for cell_idx in range(0, len(coords1)):
         neighbours_physical_matrix = coords2[neighbour_indices[cell_idx]]
@@ -125,50 +126,42 @@ def match(adata1, adata2):
             #       f"Spt Coords2: {','.join(map(str, coords2[neighbour_indices[cell_idx][idx]]))}\n"
             #       f"Calced Spt Distance: {physical_distances[idx]}\n")
 
-    logger.info(f" Time to Calculate Euclidian Distances: {time.time() - time2}s")
+    print(f" Time to Calculate Euclidian Distances: {time.time() - time2}s")
 
-    logger.info("Finding best matches...")
-    # coo_distances_matrix = distances_matrix.tocoo() * -1
+    print("Finding best matches...")
     coo_distances_matrix = distances_matrix.tocoo()
     match_struct = sslap.auction_solve(coo_mat=coo_distances_matrix, problem='min', cardinality_check=False, fast=True)
     matches = match_struct["sol"]
 
-    valid_matches = list()
-
-    for idx in range(len(matches)):
-        # logger.info(f"{idx} {matches[idx]}, "
-        #             f"Distance: {distance_to_neighbours[idx, np.where(neighbour_indices[idx] == matches[idx])]}, "
-        #             f"Threshold: {distance_thresholds[idx]}")
+    # valid_matches = list()
+    for idx in range(0, len(matches)):
+        print(f"{idx} {matches[idx]}, "
+                    f"Distance: {distance_to_neighbours[idx, np.where(neighbour_indices[idx] == matches[idx])]}, "
+                    f"Threshold: {distance_thresholds[idx]}", end='')
         cell_coords1 = coords1[idx, :]
         cell_coords2 = coords2[matches[idx], :]
         if valid_match(matches[idx], cell_coords1, cell_coords2, distance_thresholds[idx]):
             neighours_fig.plot([cell_coords1[2], cell_coords2[2]], [cell_coords1[1], cell_coords2[1]], 'r-',lw=0.03)
-            valid_matches.append((idx, matches[idx]))
-    #     else:
-    #         logger.info("Removed cell.")
-    #
-    # logger.info("Linear Sum Assignment solution:")
-    # logger.info(valid_matches)
+            print("   Plotted cell.")
+        else:
+            print("   Removed cell.")
 
-    removed_cells = len(matches) - len(valid_matches)
-    logger.info(f"Removed Cells: {removed_cells}")
-    total_removed_cells =+ removed_cells
+    # print("Linear Sum Assignment solution:")
+    # print(valid_matches)
 
     plt.savefig('matches.png', bbox_inches='tight')
+
+    print(f"Finished calculations for region {adata1[0].obs['CCFname']}\n\n")
 
 def valid_match(failed_match, cell_coords1, cell_coords2, threshold):
     if failed_match == -1: return False
     distance = euclidean_distance(cell_coords1, cell_coords2)
-    if distance < threshold * 1.5 and distance <= absolute_distance_threshold: return True
-    else: return False
+    if distance <= threshold * 1.05 and distance <= absolute_distance_threshold: print("valid match"); return True
+    return False
 
 
 start_time = time.time()
-
-logger = logging.getLogger('logger')
-grey = "\x1b[38;20m"
-logging.basicConfig(level=logging.INFO, format=grey + "%(message)s")
-np.set_printoptions(edgeitems=20)
+np.set_printoptions(edgeitems=100)
 
 # Define constants
 absolute_distance_threshold = 100  # In CCF units
@@ -182,9 +175,9 @@ full_adata1 = sc.read_h5ad(adata1_path)
 full_adata2 = sc.read_h5ad(adata2_path)
 
 # Cut data into pieces for faster prototyping
-cut_data = False
+cut_data = True
 if cut_data:
-    cut_data_factor = 10
+    cut_data_factor = 40
     num_cells = full_adata1.shape[0]
     indices = np.random.permutation(num_cells)
     split = indices[:num_cells // cut_data_factor]
@@ -195,10 +188,10 @@ if cut_data:
     split = indices[:num_cells // cut_data_factor]
     full_adata2 = full_adata2[split].copy()
 
-    logger.info('WARNING: Data split')
+    print('WARNING: Data split')
 
-logger.info(full_adata1)
-logger.info(full_adata2)
+print(full_adata1)
+print(full_adata2)
 
 # # Plot the whole brain in 3d
 # fig = plt.figure(figsize=(15, 10), dpi=900)
@@ -226,16 +219,17 @@ common_categories = sorted(set(brain_regions1.groups.keys()).intersection(set(br
 total_removed_cells = 0
 for category in common_categories:
 
+    #TODO: PROBLEM IS RIGHT HERE, BEFORE MATCH IS CALLED.
+
     indices1 = brain_regions1.groups[category]
     indices2 = brain_regions2.groups[category]
 
     adata1_subset = full_adata1[indices1]
     adata2_subset = full_adata2[indices2]
+    print(adata1_subset)
+    print(adata2_subset)
 
-    logger.info(adata1_subset)
-    logger.info(adata2_subset)
-    logger.info(f"Calculating matches for region: {adata1_subset[0].obs['CCFname']}")
-
+    print(f"Calculating matches for region: {category}")
     match(adata1_subset, adata2_subset)
 
 print(f"Total removed cells: {total_removed_cells}")
@@ -276,4 +270,4 @@ print("Plotting Done.")
 #
 # plt.savefig('umap.png', bbox_inches='tight')
 
-logger.info(f'Script took: {time.time() - start_time}')
+print(f'Script took: {time.time() - start_time}')
