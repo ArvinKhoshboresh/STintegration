@@ -57,17 +57,17 @@ logger.info(adata1)
 logger.info(adata2)
 
 # Extract spatial coordinates
-coords1 = extract_coords(adata1)
-coords2 = extract_coords(adata2)
-# coords1 = adata1.obsm['X_spatial']
-# coords2 = adata2.obsm['X_spatial']
+# coords1 = extract_coords(adata1)
+# coords2 = extract_coords(adata2)
+coords1 = adata1.obsm['X_spatial']
+coords2 = adata2.obsm['X_spatial']
 
 # Construct KDTree for both AnnData objects
 kdtree1 = KDTree(coords1)
 kdtree2 = KDTree(coords2)
 
 # Define constants
-distance_threshold = 3.5  # In CCF units
+distance_threshold = 0.15  # In CCF units
 
 # Use query_ball_tree to find neighboring cells
 neighbour_indices = kdtree1.query_ball_tree(kdtree2, distance_threshold)
@@ -90,10 +90,10 @@ if label_cells:
         neighours_fig.annotate(cell_Idx, (cell_coord[0], cell_coord[1]), fontsize=4)
 
 # Create matrix of gene expression x cells
-expression_matrix1 = adata1.X.toarray()
-expression_matrix2 = adata2.X.toarray()
-# expression_matrix1 = adata2.X
-# expression_matrix2 = adata2.X
+# expression_matrix1 = adata1.X.toarray()
+# expression_matrix2 = adata2.X.toarray()
+expression_matrix1 = adata1.X
+expression_matrix2 = adata2.X
 
 # Create matrix to hold all distances to each pair in adata2
 distances_matrix = lil_matrix((coords1.size, coords2.size))
@@ -157,8 +157,8 @@ for idx in range(len(matches)):
 
 
 # # Write matches to disk
-print(f"Unmatched Cells: {unmatched_cells}")
-np.save('matches.npy', matches)
+# print(f"Unmatched Cells: {unmatched_cells}")
+# np.save('matches.npy', matches)
 
 # Add labels and legend
 neighours_fig.set_xlabel('X Coordinate')

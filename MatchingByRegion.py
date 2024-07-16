@@ -1,3 +1,4 @@
+import gc
 import time
 import scanpy as sc
 from scipy.sparse import lil_matrix
@@ -113,8 +114,8 @@ def match(adata1, adata2):
             expression_distance = expression_distances[idx]
             if spatial_distance > 0 and expression_distance > 0:
                 distances_matrix[cell_idx, neighbour_indices[cell_idx][idx]] = np.add(
-                    weighted_distance(spatial_distance, 0.8, distance_thresholds[cell_idx]) * 10,
-                    expression_distance / 1)
+                    weighted_distance(spatial_distance, 0.8, (distance_thresholds[cell_idx]) * 10) ** 3,
+                    (expression_distance / 1) ** 3)
 
             # # Print results for debugging
             # print(f"\nCell {cell_idx} from adata1 to Cell {neighbour_indices[cell_idx][idx]} from adata2:\n"
@@ -142,8 +143,11 @@ def match(adata1, adata2):
         cell_coords2 = coords2[matches[idx], :]
         if valid_match(matches[idx], cell_coords1, cell_coords2, distance_thresholds[idx]):
             neighours_fig.plot([cell_coords1[2], cell_coords2[2]], [cell_coords1[1], cell_coords2[1]], 'r-',lw=0.03)
+            all_matches.append((full_adata1.obs_names.get_loc(adata1.obs_names[idx]),
+                                full_adata2.obs_names.get_loc(adata2.obs_names[matches[idx]])))
             print("   Plotted cell.")
         else:
+            total_removed_cells =+ 1
             print("   Removed cell.")
 
     # print("Linear Sum Assignment solution:")
@@ -153,15 +157,18 @@ def match(adata1, adata2):
 
     print(f"Finished calculations for region {adata1[0].obs['CCFname']}\n\n")
 
+    del physical_distances, expression_distances, distances_matrix, matches
+    gc.collect()
+
 def valid_match(failed_match, cell_coords1, cell_coords2, threshold):
     if failed_match == -1: return False
     distance = euclidean_distance(cell_coords1, cell_coords2)
-    if distance <= threshold * 1.05 and distance <= absolute_distance_threshold: print("valid match"); return True
+    if distance <= threshold * 1.05 and distance <= absolute_distance_threshold: return True
     return False
 
 
 start_time = time.time()
-np.set_printoptions(edgeitems=100)
+np.set_printoptions(edgeitems=100000)
 
 # Define constants
 absolute_distance_threshold = 100  # In CCF units
@@ -217,6 +224,7 @@ brain_regions2 = full_adata2.obs.groupby("CCFname")
 common_categories = sorted(set(brain_regions1.groups.keys()).intersection(set(brain_regions2.groups.keys())))
 
 total_removed_cells = 0
+all_matches = list()
 for category in common_categories:
 
     #TODO: PROBLEM IS RIGHT HERE, BEFORE MATCH IS CALLED.
@@ -224,15 +232,22 @@ for category in common_categories:
     indices1 = brain_regions1.groups[category]
     indices2 = brain_regions2.groups[category]
 
+    # adata1_subset = full_adata1[full_adata1.obs_names.isin(indices1)]
+    # adata2_subset = full_adata2[full_adata2.obs_names.isin(indices2)]
+
     adata1_subset = full_adata1[indices1]
     adata2_subset = full_adata2[indices2]
-    print(adata1_subset)
-    print(adata2_subset)
 
     print(f"Calculating matches for region: {category}")
+    print(adata1_subset)
+    print(adata2_subset)
     match(adata1_subset, adata2_subset)
 
+    del indices1, indices2, adata1_subset, adata2_subset
+    gc.collect()
+
 print(f"Total removed cells: {total_removed_cells}")
+print(all_matches)
 
 # # Write matches to disk
 # np.save('matches.npy', matches)
