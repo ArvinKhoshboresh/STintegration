@@ -1,4 +1,3 @@
-import gc
 import time
 import scanpy as sc
 from scipy.sparse import lil_matrix
@@ -157,9 +156,6 @@ def match(adata1, adata2):
 
     print(f"Finished calculations for region {adata1[0].obs['CCFname']}\n\n")
 
-    del physical_distances, expression_distances, distances_matrix, matches
-    gc.collect()
-
 def valid_match(failed_match, cell_coords1, cell_coords2, threshold):
     if failed_match == -1: return False
     distance = euclidean_distance(cell_coords1, cell_coords2)
@@ -227,8 +223,6 @@ total_removed_cells = 0
 all_matches = list()
 for category in common_categories:
 
-    #TODO: PROBLEM IS RIGHT HERE, BEFORE MATCH IS CALLED.
-
     indices1 = brain_regions1.groups[category]
     indices2 = brain_regions2.groups[category]
 
@@ -242,9 +236,7 @@ for category in common_categories:
     print(adata1_subset)
     print(adata2_subset)
     match(adata1_subset, adata2_subset)
-
-    del indices1, indices2, adata1_subset, adata2_subset
-    gc.collect()
+    
 
 print(f"Total removed cells: {total_removed_cells}")
 print(all_matches)
