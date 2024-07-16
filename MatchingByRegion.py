@@ -8,6 +8,7 @@ import sys
 import sslap
 import matplotlib.pyplot as plt
 
+
 def extract_coords(adata):
     """
     Extracts the CCF_AP_axis, CCF_ML_axis, and CCF_DV_axis columns from the obs DataFrame of an anndata object
@@ -24,6 +25,7 @@ def extract_coords(adata):
     z = adata.obs['CCF_DV_axis'].values
     return np.vstack((x, y, z)).T
 
+
 def weighted_distance(distance, scale, max_distance):
     """
     Applies an exponential weighting-up to the input distance, asymptotically approaching the max_distance.
@@ -36,12 +38,12 @@ def weighted_distance(distance, scale, max_distance):
     # Apply exponential growth function
     return max_distance * (1 - math.exp(-distance / (scale * max_distance)))
 
+
 def euclidean_distance(point1, point2):
     return np.sqrt(np.sum((point1 - point2) ** 2))
 
 
 def match(adata1, adata2):
-
     if len(adata1) == 1 or len(adata2) == 1: return
     print(f"Started calculations for region {adata1[0].obs['CCFname']}...")
 
@@ -128,25 +130,26 @@ def match(adata1, adata2):
 
     print(f" Time to Calculate Euclidian Distances: {time.time() - time2}s")
 
+    time3 = time.time()
     print("Finding best matches...")
-    coo_distances_matrix = distances_matrix.tocoo()
-    match_struct = sslap.auction_solve(coo_mat=coo_distances_matrix, problem='min', cardinality_check=False, fast=True)
+    # coo_distances_matrix = distances_matrix.tocoo()
+    match_struct = sslap.auction_solve(distances_matrix.todense(), problem='min', cardinality_check=False, fast=True)
     matches = match_struct["sol"]
 
     # valid_matches = list()
     for idx in range(0, len(matches)):
         print(f"{idx} {matches[idx]}, "
-                    f"Distance: {distance_to_neighbours[idx, np.where(neighbour_indices[idx] == matches[idx])]}, "
-                    f"Threshold: {distance_thresholds[idx]}", end='')
+              f"Distance: {distance_to_neighbours[idx, np.where(neighbour_indices[idx] == matches[idx])]}, "
+              f"Threshold: {distance_thresholds[idx]}", end='')
         cell_coords1 = coords1[idx, :]
         cell_coords2 = coords2[matches[idx], :]
         if valid_match(matches[idx], cell_coords1, cell_coords2, distance_thresholds[idx]):
-            neighours_fig.plot([cell_coords1[2], cell_coords2[2]], [cell_coords1[1], cell_coords2[1]], 'r-',lw=0.03)
+            neighours_fig.plot([cell_coords1[2], cell_coords2[2]], [cell_coords1[1], cell_coords2[1]], 'r-', lw=0.03)
             all_matches.append((full_adata1.obs_names.get_loc(adata1.obs_names[idx]),
                                 full_adata2.obs_names.get_loc(adata2.obs_names[matches[idx]])))
             print("   Plotted cell.")
         else:
-            total_removed_cells =+ 1
+            total_removed_cells = + 1
             print("   Removed cell.")
 
     # print("Linear Sum Assignment solution:")
@@ -154,7 +157,9 @@ def match(adata1, adata2):
 
     plt.savefig('matches.png', bbox_inches='tight')
 
+    print(f" Time to Calculate matches and plot: {time.time() - time3}s")
     print(f"Finished calculations for region {adata1[0].obs['CCFname']}\n\n")
+
 
 def valid_match(failed_match, cell_coords1, cell_coords2, threshold):
     if failed_match == -1: return False
@@ -178,7 +183,7 @@ full_adata1 = sc.read_h5ad(adata1_path)
 full_adata2 = sc.read_h5ad(adata2_path)
 
 # Cut data into pieces for faster prototyping
-cut_data = True
+cut_data = False
 if cut_data:
     cut_data_factor = 40
     num_cells = full_adata1.shape[0]
@@ -222,7 +227,6 @@ common_categories = sorted(set(brain_regions1.groups.keys()).intersection(set(br
 total_removed_cells = 0
 all_matches = list()
 for category in common_categories:
-
     indices1 = brain_regions1.groups[category]
     indices2 = brain_regions2.groups[category]
 
@@ -236,7 +240,6 @@ for category in common_categories:
     print(adata1_subset)
     print(adata2_subset)
     match(adata1_subset, adata2_subset)
-    
 
 print(f"Total removed cells: {total_removed_cells}")
 print(all_matches)
