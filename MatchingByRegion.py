@@ -5,7 +5,7 @@ from scipy.spatial import KDTree
 import numpy as np
 import math
 import sys
-import sslap
+from lapjv import lapjv
 import matplotlib.pyplot as plt
 
 
@@ -86,7 +86,7 @@ def match(adata1, adata2):
     expression_matrix2 = adata2.X.toarray()
 
     # Create matrix to hold all distances to each pair in adata2
-    distances_matrix = lil_matrix((len(coords1), len(coords2)))
+    distances_matrix = np.full((len(coords1), len(coords2)), 2147483647, dtype=np.int32)
 
     print("Calculating Distances...")
     time2 = time.time()
@@ -132,48 +132,85 @@ def match(adata1, adata2):
 
     time3 = time.time()
     print("Finding best matches...")
-    # coo_distances_matrix = distances_matrix.tocoo()
-    match_struct = sslap.auction_solve(distances_matrix.todense(), problem='min', cardinality_check=False, fast=True)
-    matches = match_struct["sol"]
 
-    # valid_matches = list()
-    for idx in range(0, len(matches)):
-        print(f"{idx} {matches[idx]}, "
-              f"Distance: {distance_to_neighbours[idx, np.where(neighbour_indices[idx] == matches[idx])]}, "
-              f"Threshold: {distance_thresholds[idx]}", end='')
-        cell_coords1 = coords1[idx, :]
-        cell_coords2 = coords2[matches[idx], :]
-        if valid_match(matches[idx], cell_coords1, cell_coords2, distance_thresholds[idx]):
-            neighours_fig.plot([cell_coords1[2], cell_coords2[2]], [cell_coords1[1], cell_coords2[1]], 'r-', lw=0.03)
-            all_matches.append((full_adata1.obs_names.get_loc(adata1.obs_names[idx]),
-                                full_adata2.obs_names.get_loc(adata2.obs_names[matches[idx]])))
-            print("   Plotted cell.")
+    equalized_matrix = equalize_cardinality(distances_matrix)
+    matches, col_index, _ = lapjv(equalized_matrix, verbose=0)
+
+    global removed_cell_tracker
+    removed_cells_before_region = removed_cell_tracker
+    global all_matches
+    global all_matches_tracker
+
+    for idx in range(0, len(adata1)):
+        # print(f"{idx} {matches[idx]}, "
+        #       f"Distance: {distance_to_neighbours[idx, np.where(neighbour_indices[idx] == matches[idx])]}, "
+        #       f"Threshold: {distance_thresholds[idx]}", end='')
+        if matches[idx] < len(adata2):
+            cell_coords1 = coords1[idx, :]
+            cell_coords2 = coords2[matches[idx], :]
+            if valid_match(matches[idx], distances_matrix[idx, matches[idx]],
+                           cell_coords1, cell_coords2, distance_thresholds[idx]):
+                neighours_fig.plot([cell_coords1[2], cell_coords2[2]], [cell_coords1[1], cell_coords2[1]], 'r-', lw=0.03)
+                all_matches[all_matches_tracker] = (adata1.obs_names[idx],
+                                                    adata2.obs_names[matches[idx]])
+                all_matches_tracker += 1
+                # print("   Plotted cell.")
+            else:
+                removed_cell_tracker += 1
+                # print("   Removed cell.")
         else:
-            total_removed_cells = + 1
-            print("   Removed cell.")
+            removed_cell_tracker += 1
+            # print("   Removed cell.")
 
-    # print("Linear Sum Assignment solution:")
-    # print(valid_matches)
+    print(f"Removed cells in this region: {removed_cell_tracker - removed_cells_before_region}")
 
-    plt.savefig('matches.png', bbox_inches='tight')
+    plt.savefig(plot_name, bbox_inches='tight')
+    np.save('matches.npy', all_matches)
 
     print(f" Time to Calculate matches and plot: {time.time() - time3}s")
     print(f"Finished calculations for region {adata1[0].obs['CCFname']}\n\n")
 
 
-def valid_match(failed_match, cell_coords1, cell_coords2, threshold):
-    if failed_match == -1: return False
+def equalize_cardinality(matrix, fill_value=2147483647):
+    """
+    Pads a rectangular matrix to make it square by filling extra values with fill_value.
+
+    Args:
+    - matrix (list of lists or np.ndarray): The input matrix.
+    - fill_value (int): The value to fill the extra cells. Default is 2147483647.
+
+    Returns:
+    - np.ndarray: A squared matrix.
+    """
+    if isinstance(matrix, list):
+        matrix = np.array(matrix)
+
+    rows, cols = matrix.shape
+    size = max(rows, cols)
+
+    # Create a new square matrix filled with the fill_value
+    square_matrix = np.full((size, size), fill_value, dtype=matrix.dtype)
+
+    # Copy the original matrix into the new square matrix
+    square_matrix[:rows, :cols] = matrix
+
+    return square_matrix
+
+
+def valid_match(match_idx, adjusted_distance, cell_coords1, cell_coords2, threshold):
+    if adjusted_distance == 2147483647: return False
     distance = euclidean_distance(cell_coords1, cell_coords2)
     if distance <= threshold * 1.05 and distance <= absolute_distance_threshold: return True
     return False
 
 
 start_time = time.time()
-np.set_printoptions(edgeitems=100000)
+np.set_printoptions(edgeitems=100)
 
 # Define constants
 absolute_distance_threshold = 100  # In CCF units
 num_neighbours = 100
+plot_name = f"{time.time()}-AllMatches.png"
 
 # Load AnnData objects
 adata1_path = sys.argv[1]
@@ -224,8 +261,10 @@ brain_regions2 = full_adata2.obs.groupby("CCFname")
 
 common_categories = sorted(set(brain_regions1.groups.keys()).intersection(set(brain_regions2.groups.keys())))
 
-total_removed_cells = 0
-all_matches = list()
+removed_cell_tracker = 0
+all_matches = np.zeros(len(full_adata1), dtype=(np.int32, 2))
+all_matches_tracker = 0
+
 for category in common_categories:
     indices1 = brain_regions1.groups[category]
     indices2 = brain_regions2.groups[category]
@@ -241,16 +280,15 @@ for category in common_categories:
     print(adata2_subset)
     match(adata1_subset, adata2_subset)
 
-print(f"Total removed cells: {total_removed_cells}")
+print(f"Total removed cells: {removed_cell_tracker}")
 print(all_matches)
 
-# # Write matches to disk
-# np.save('matches.npy', matches)
+# Write matches to disk
+np.save('matches.npy', all_matches)
 
 neighours_fig.set_xlabel('X Coordinate')
 neighours_fig.set_ylabel('Y Coordinate')
 neighours_fig.legend()
-plt.savefig('matches.png', bbox_inches='tight')
 print("Plotting Done.")
 
 # ################## UMAP Matching #################

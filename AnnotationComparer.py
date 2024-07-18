@@ -1,13 +1,13 @@
 import numpy as np
 import scanpy as sc
 import sys
-import pandas as pd
 
 # Load AnnData objects
 adata1_path = sys.argv[1]
 adata2_path = sys.argv[2]
 np_array_path = sys.argv[3]
-annotations_path = sys.argv[4]
+
+np.set_printoptions(edgeitems=100)
 
 adata1 = sc.read_h5ad(adata1_path)
 adata2 = sc.read_h5ad(adata2_path)
@@ -16,28 +16,36 @@ print(adata1)
 print(adata2)
 
 matches = np.load(np_array_path)
+print(matches)
 
-annotations_df = pd.read_csv(annotations_path, index_col=0)
+annotations = ['clustid', 'clustname', 'subclass']
 
-print(annotations_df)
-
-annotations = ['neurotransmitter', 'class', 'subclass', 'supertype', 'cluster']
+matched_clustid = 0
+matched_clustname = 0
+matched_subclass = 0
 
 # Loop through the array and retrieve the cell ID and annotation
-for idx, value in enumerate(matches):
+for match in matches:
     try:
-        cell_id1 = adata1.obs_names[idx]  # Cell ID at the matches index position
-        cell_id2 = adata2.obs_names[value]  # Cell ID at the matches value position
+        cell_index1 = match[0]
+        cell_index2 = match[1]
 
-        row1 = annotations_df.loc[cell_id1]
-        row2 = annotations_df.loc[cell_id2]
+        annotation1 = adata1.obs_names[cell_index1][annotations]
+        annotation2 = adata2.obs_names[cell_index2][annotations]
 
-        annotation1 = row1[annotations]
-        annotation2 = row2[annotations]
+        print(annotation1)
+        print(annotation2)
 
-        print(f'Match: {idx}, {value}')
-        print(f'{idx}: {cell_id1}, Annotations: {annotation1.to_dict()}')
-        print(f'{value}: {cell_id2}, Annotations: {annotation2.to_dict()}')
+        print(f'Match: {cell_index1}, {cell_index2}')
+        print(f'{cell_index1}: Annotations: {annotation1.to_dict()}')
+        print(f'{cell_index2}, Annotations: {annotation2.to_dict()}')
+        if annotation1[0] == annotation2[0]: matched_clustid += 1
+        if annotation1[1] == annotation2[1]: matched_clustname += 1
+        if annotation1[2] == annotation2[2]: matched_subclass += 1
         print("\n")
     except KeyError as e:
         print(f'Error: {e}')
+
+print(f"Matching clustid %: {(matched_clustid / len(matches)) * 100}")
+print(f"Matching clustname %: {(matched_clustname / len(matches)) * 100}")
+print(f"Matching subclass %: {(matched_subclass / len(matches)) * 100}")
