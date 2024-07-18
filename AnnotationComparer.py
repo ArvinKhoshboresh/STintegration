@@ -7,7 +7,7 @@ adata1_path = sys.argv[1]
 adata2_path = sys.argv[2]
 np_array_path = sys.argv[3]
 
-np.set_printoptions(edgeitems=100)
+np.set_printoptions(edgeitems=15)
 
 adata1 = sc.read_h5ad(adata1_path)
 adata2 = sc.read_h5ad(adata2_path)
@@ -17,6 +17,7 @@ print(adata2)
 
 matches = np.load(np_array_path)
 print(matches)
+print(f"Matches length: {len(matches)}")
 
 annotations = ['clustid', 'clustname', 'subclass']
 
@@ -25,26 +26,23 @@ matched_clustname = 0
 matched_subclass = 0
 
 # Loop through the array and retrieve the cell ID and annotation
-for match in matches:
-    try:
-        cell_index1 = match[0]
-        cell_index2 = match[1]
+for idx, match in enumerate(matches):
 
-        annotation1 = adata1.obs_names[cell_index1][annotations]
-        annotation2 = adata2.obs_names[cell_index2][annotations]
+    if sum(match) == 0: break
 
-        print(annotation1)
-        print(annotation2)
+    print(f"Idx: {idx}    Match: {match}")
+    cell_index1 = match[0]
+    cell_index2 = match[1]
 
-        print(f'Match: {cell_index1}, {cell_index2}')
-        print(f'{cell_index1}: Annotations: {annotation1.to_dict()}')
-        print(f'{cell_index2}, Annotations: {annotation2.to_dict()}')
-        if annotation1[0] == annotation2[0]: matched_clustid += 1
-        if annotation1[1] == annotation2[1]: matched_clustname += 1
-        if annotation1[2] == annotation2[2]: matched_subclass += 1
-        print("\n")
-    except KeyError as e:
-        print(f'Error: {e}')
+    annotation1 = adata1[str(cell_index1)].obs[annotations].to_numpy()[0]
+    annotation2 = adata2[str(cell_index2)].obs[annotations].to_numpy()[0]
+
+    print(f'{cell_index1}: Annotations: {annotation1}')
+    print(f'{cell_index2}, Annotations: {annotation2}')
+    if annotation1[0] == annotation2[0]: matched_clustid += 1
+    if annotation1[1] == annotation2[1]: matched_clustname += 1
+    if annotation1[2] == annotation2[2]: matched_subclass += 1
+    print("\n")
 
 print(f"Matching clustid %: {(matched_clustid / len(matches)) * 100}")
 print(f"Matching clustname %: {(matched_clustname / len(matches)) * 100}")
