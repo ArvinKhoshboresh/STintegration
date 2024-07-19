@@ -288,31 +288,4 @@ neighours_fig.set_ylabel('Y Coordinate')
 neighours_fig.legend()
 print("Plotting Done.")
 
-# ################## UMAP Matching #################
-# # UMAPs are already computed in main.py
-# # Get UMAP coords
-# umap1 = adata1.obsm['X_umap']
-# umap2 = adata2.obsm['X_umap']
-#
-# # Plot the UMAP embeddings
-# fig, umap_fig = plt.subplots(figsize=(10, 10), dpi=500)
-#
-# # Plot UMAP for adata1
-# umap_fig.scatter(umap1[:, 0], umap1[:, 1], c='blue', label='adata1', alpha=0.5, s=1)
-# # Plot UMAP for adata2
-# umap_fig.scatter(umap2[:, 0], umap2[:, 1], c='red', label='adata2', alpha=0.5, s=1)
-#
-# # Draw lines between matched cells
-# for idx in range(len(adata1_match_idx)):
-#     umap_coords1 = umap1[adata1_match_idx[idx], :]
-#     umap_coords2 = umap2[adata2_match_idx[idx], :]
-#     umap_fig.plot([umap_coords1[0], umap_coords2[0]], [umap_coords1[1], umap_coords2[1]], 'r-', lw=0.05)
-#
-# # Add labels and legend
-# umap_fig.set_xlabel('UMAP1')
-# umap_fig.set_ylabel('UMAP2')
-# umap_fig.legend()
-#
-# plt.savefig('umap.png', bbox_inches='tight')
-
 print(f'Script took: {time.time() - start_time}')
