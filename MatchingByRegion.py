@@ -139,9 +139,6 @@ def match(adata1, adata2):
     global all_matches_tracker
 
     for idx in range(0, len(adata1)):
-        # print(f"{idx} {matches[idx]}, "
-        #       f"Distance: {distance_to_neighbours[idx, np.where(neighbour_indices[idx] == matches[idx])]}, "
-        #       f"Threshold: {distance_thresholds[idx]}", end='')
         if matches[idx] < len(adata2):
             cell_coords1 = coords1[idx, :]
             cell_coords2 = coords2[matches[idx], :]

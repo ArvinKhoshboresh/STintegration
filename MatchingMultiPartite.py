@@ -1,25 +1,12 @@
-import time
-import scanpy as sc
-from scipy.sparse import lil_matrix
-from scipy.spatial import KDTree
 import numpy as np
-import math
+from ortools.linear_solver import pywraplp
 import sys
-from lapjv import lapjv
-import matplotlib.pyplot as plt
-
+import scanpy as sc
+import time
+from scipy.spatial import KDTree
+import math
 
 def extract_coords(adata):
-    """
-    Extracts the CCF_AP_axis, CCF_ML_axis, and CCF_DV_axis columns from the obs DataFrame of an anndata object
-    and combines them into a single matrix.
-
-    Parameters:
-    adata (anndata.AnnData): The anndata object.
-
-    Returns:
-    np.ndarray: A matrix with X, Y, and Z coordinates in each row.
-    """
     x = adata.obs['CCF_AP_axis'].values
     y = adata.obs['CCF_ML_axis'].values
     z = adata.obs['CCF_DV_axis'].values
@@ -27,65 +14,24 @@ def extract_coords(adata):
 
 
 def weighted_distance(distance, scale, max_distance):
-    """
-    Applies an exponential weighting-up to the input distance, asymptotically approaching the max_distance.
-    Scale adjusts the rate of growth.
-
-    Higher scale more gradually increases the weighted distance
-    Lower scale has less effect on lower distances, more effect on higher distances
-    """
-
     # Apply exponential growth function
     return max_distance * (1 - math.exp(-distance / (scale * max_distance)))
 
 
-def euclidean_distance(point1, point2):
-    return np.sqrt(np.sum((point1 - point2) ** 2))
+def distance_matrix(adata1, adata2, num_neighbours):
+    print(f"Started distance calculations for region {adata1[0].obs['CCFname']}...")
 
-
-def match(adata1, adata2):
-    if len(adata1) == 1 or len(adata2) == 1: return
-    print(f"Started calculations for region {adata1[0].obs['CCFname']}...")
-
-    # Extract spatial coordinates
     coords1 = extract_coords(adata1)
     coords2 = extract_coords(adata2)
-
-    # # Plot this region in Coronal view
-    # fig, neighours_fig = plt.subplots(figsize=(15, 10), dpi=800)
-    # # Plot all cells from both datasets
-    # neighours_fig.scatter(coords1[:, 2], coords1[:, 1], c='blue', label='adata1', alpha=0.5, s=0.2, linewidths=0.3)
-    # neighours_fig.scatter(coords2[:, 2], coords2[:, 1], c='red', label='adata2', alpha=0.5, s=0.2, linewidths=0.3)
-    # # for cell_Idx, cell_coord in enumerate(coords1):
-    # #     neighours_fig.annotate(adata1.obs['slice'][cell_Idx], (cell_coord[2], cell_coord[1]), fontsize=1)
-    # # for cell_Idx, cell_coord in enumerate(coords2):
-    # #     neighours_fig.annotate(adata2.obs['slice'][cell_Idx], (cell_coord[2], cell_coord[1]), fontsize=1)
-    # neighours_fig.set_xlabel('Z Coordinate')
-    # neighours_fig.set_ylabel('Y Coordinate')
-    # plt.savefig('graph.png', bbox_inches='tight')
-
-    # Plot all cells from both datasets
-    neighours_fig.scatter(coords1[:, 2], coords1[:, 1], c='blue', label='adata1', alpha=0.5, s=0.2, linewidths=0.2)
-    neighours_fig.scatter(coords2[:, 2], coords2[:, 1], c='red', label='adata2', alpha=0.5, s=0.2, linewidths=0.2)
-    label_cells = False
-    if label_cells:
-        for cell_Idx, cell_coord in enumerate(coords1):
-            neighours_fig.annotate(cell_Idx, (cell_coord[0], cell_coord[1]), fontsize=4)
-
-    # Construct KDTree for AnnData objects
     kdtree2 = KDTree(coords2)
-    # Find neighboring cells
     num_valid_neighbours = num_neighbours
     if num_neighbours > len(coords2): num_valid_neighbours = len(coords2)
     distance_to_neighbours, neighbour_indices = kdtree2.query(coords1, k=num_valid_neighbours)
-    # Find distance_threshold for every point in coords1
     distance_thresholds = distance_to_neighbours[:, -1]
 
-    # Create matrix of gene expression x cells
     expression_matrix1 = adata1.X.toarray()
     expression_matrix2 = adata2.X.toarray()
 
-    # Create matrix to hold all distances to each pair in adata2
     distances_matrix = np.full((len(coords1), len(coords2)), 2147483647, dtype=np.uint32)
 
     print("Calculating Distances...")
@@ -127,165 +73,96 @@ def match(adata1, adata2):
 
     print(f"Time to Calculate Euclidian Distances: {time.time() - time2}s")
 
-    time3 = time.time()
-    print("Finding best matches...")
-
-    equalized_matrix = equalize_cardinality(distances_matrix)
-    matches, col_index, _ = lapjv(equalized_matrix, verbose=0)
-
-    global removed_cell_tracker
-    removed_cells_before_region = removed_cell_tracker
-    global all_matches
-    global all_matches_tracker
-
-    for idx in range(0, len(adata1)):
-        # print(f"{idx} {matches[idx]}, "
-        #       f"Distance: {distance_to_neighbours[idx, np.where(neighbour_indices[idx] == matches[idx])]}, "
-        #       f"Threshold: {distance_thresholds[idx]}", end='')
-        if matches[idx] < len(adata2):
-            cell_coords1 = coords1[idx, :]
-            cell_coords2 = coords2[matches[idx], :]
-            if valid_match(distances_matrix[idx, matches[idx]],
-                           cell_coords1, cell_coords2, distance_thresholds[idx]):
-                neighours_fig.plot([cell_coords1[2], cell_coords2[2]], [cell_coords1[1], cell_coords2[1]], 'r-', lw=0.03)
-                all_matches[all_matches_tracker] = (adata1.obs_names[idx],
-                                                    adata2.obs_names[matches[idx]])
-                all_matches_tracker += 1
-                # print("   Plotted cell.")
-            else:
-                removed_cell_tracker += 1
-                # print("   Removed cell.")
-        else:
-            removed_cell_tracker += 1
-            # print("   Removed cell.")
-
-    print(f"Removed cells in this region: {removed_cell_tracker - removed_cells_before_region}")
-
-    plt.savefig(plot_path, bbox_inches='tight')
-    np.save('matches.npy', all_matches)
-
-    print(f" Time to Calculate matches and plot: {time.time() - time3}s")
-    print(f"Finished calculations for region {adata1[0].obs['CCFname']}\n\n")
+    return distances_matrix
 
 
-def equalize_cardinality(matrix, fill_value=2147483647):
-    """
-    Pads a rectangular matrix to make it square by filling extra values with fill_value.
+def create_data_model(adata1, adata2, adata3, adata4):
+    # Example cost matrices for 4 datasets with 3 samples each MUST BE SQUARE FOR NOW
+    cost_matrix_1_2 = np.random.rand(3, 3)
+    cost_matrix_1_3 = np.random.rand(3, 3)
+    cost_matrix_1_4 = np.random.rand(3, 3)
+    cost_matrix_2_3 = np.random.rand(3, 3)
+    cost_matrix_2_4 = np.random.rand(3, 3)
+    cost_matrix_3_4 = np.random.rand(3, 3)
 
-    Args:
-    - matrix (list of lists or np.ndarray): The input matrix.
-    - fill_value (int): The value to fill the extra cells. Default is 2147483647.
+    size = cost_matrix_1_2.shape[0]
+    combined_distances_matrix = np.zeros((size, size, size, size))
 
-    Returns:
-    - np.ndarray: A squared matrix.
-    """
-    if isinstance(matrix, list):
-        matrix = np.array(matrix)
+    for i in range(size):
+        for j in range(size):
+            for k in range(size):
+                for l in range(size):
+                    combined_distances_matrix[i, j, k, l] = (
+                            cost_matrix_1_2[i, j] +
+                            cost_matrix_1_3[i, k] +
+                            cost_matrix_1_4[i, l] +
+                            cost_matrix_2_3[j, k] +
+                            cost_matrix_2_4[j, l] +
+                            cost_matrix_3_4[k, l]
+                    )
 
-    rows, cols = matrix.shape
-    size = max(rows, cols)
-
-    # Create a new square matrix filled with the fill_value
-    square_matrix = np.full((size, size), fill_value, dtype=matrix.dtype)
-
-    # Copy the original matrix into the new square matrix
-    square_matrix[:rows, :cols] = matrix
-
-    return square_matrix
-
-
-def valid_match(adjusted_distance, cell_coords1, cell_coords2, threshold):
-    if adjusted_distance == 2147483647: return False
-    distance = euclidean_distance(cell_coords1, cell_coords2)
-    if distance <= threshold * 1.05 and distance <= absolute_distance_threshold: return True
-    return False
+    return combined_distances_matrix, size
 
 
-start_time = time.time()
-np.set_printoptions(edgeitems=100)
+def solve_assignment(combined_distances_matrix, size):
+    # Create the mip solver with the SCIP backend.
+    solver = pywraplp.Solver.CreateSolver('SCIP')
 
-# Define constants
-absolute_distance_threshold = 100  # In CCF units
-num_neighbours = 300
-plot_path = f"Plots/{time.time()}-AllMatches.png"
+    # Create decision variables
+    x = {}
+    for i in range(size):
+        for j in range(size):
+            for k in range(size):
+                for l in range(size):
+                    x[i, j, k, l] = solver.BoolVar(f'x[{i},{j},{k},{l}]')
+
+    # Define the objective function
+    solver.Minimize(solver.Sum(combined_distances_matrix[i, j, k, l] * x[i, j, k, l]
+                               for i in range(size) for j in range(size) for k in range(size) for l in range(size)))
+
+    # Constraints: each sample should be assigned exactly once in each dimension
+    for i in range(size):
+        solver.Add(solver.Sum(x[i, j, k, l] for j in range(size) for k in range(size) for l in range(size)) == 1)
+    for j in range(size):
+        solver.Add(solver.Sum(x[i, j, k, l] for i in range(size) for k in range(size) for l in range(size)) == 1)
+    for k in range(size):
+        solver.Add(solver.Sum(x[i, j, k, l] for i in range(size) for j in range(size) for l in range(size)) == 1)
+    for l in range(size):
+        solver.Add(solver.Sum(x[i, j, k, l] for i in range(size) for j in range(size) for k in range(size)) == 1)
+
+    # Solve the problem
+    status = solver.Solve()
+
+    if status == pywraplp.Solver.OPTIMAL:
+        print('Solution:')
+        assignments = []
+        for i in range(size):
+            for j in range(size):
+                for k in range(size):
+                    for l in range(size):
+                        if x[i, j, k, l].solution_value() == 1:
+                            assignments.append((i, j, k, l))
+                            print(f'Sample {i} from Dataset A assigned to Sample {j} from Dataset B, '
+                                  f'Sample {k} from Dataset C, Sample {l} from Dataset D')
+        return assignments
+    else:
+        print('The problem does not have an optimal solution.')
+
 
 # Load AnnData objects
 adata1_path = sys.argv[1]
 adata2_path = sys.argv[2]
+adata3_path = sys.argv[3]
+adata4_path = sys.argv[4]
 
 full_adata1 = sc.read_h5ad(adata1_path)
 full_adata2 = sc.read_h5ad(adata2_path)
+full_adata3 = sc.read_h5ad(adata3_path)
+full_adata4 = sc.read_h5ad(adata4_path)
 
-# Cut data into pieces for faster prototyping
-cut_data = False
-if cut_data:
-    cut_data_factor = 40
-    num_cells = full_adata1.shape[0]
-    indices = np.random.permutation(num_cells)
-    split = indices[:num_cells // cut_data_factor]
-    full_adata1 = full_adata1[split].copy()
+num_neighbours = 150
 
-    num_cells = full_adata2.shape[0]
-    indices = np.random.permutation(num_cells)
-    split = indices[:num_cells // cut_data_factor]
-    full_adata2 = full_adata2[split].copy()
+combined_distances_matrix, size = create_data_model(full_adata1, full_adata2, full_adata3, full_adata4)
+solve_assignment(combined_distances_matrix, size)
 
-    print('WARNING: Data split')
 
-print(full_adata1)
-print(full_adata2)
-
-# # Plot the whole brain in 3d
-# fig = plt.figure(figsize=(15, 10), dpi=900)
-# neighours_fig = fig.add_subplot(111, projection='3d')
-# # Plot all cells from both datasets
-# coords1 = extract_coords((full_adata1))
-# coords2 = extract_coords((full_adata2))
-# neighours_fig.scatter(coords1[:, 0], coords1[:, 1], coords1[:, 2], c='blue', label='adata1', alpha=0.5, s=0.05,linewidths=0.05)
-# neighours_fig.scatter(coords2[:, 0], coords2[:, 1], coords2[:, 2], c='red', label='adata2', alpha=0.5, s=0.05,linewidths=0.05)
-# neighours_fig.set_xlabel('X Coordinate')
-# neighours_fig.set_ylabel('Y Coordinate')
-# neighours_fig.set_zlabel('Z Coordinate')
-# neighours_fig.legend()
-# plt.savefig(f'{time.time()}_graph.png', bbox_inches='tight')
-# print("Big Plotting done")
-
-# Create plot
-fig, neighours_fig = plt.subplots(figsize=(15, 10), dpi=1200)
-
-brain_regions1 = full_adata1.obs.groupby("CCFname")
-brain_regions2 = full_adata2.obs.groupby("CCFname")
-
-common_categories = sorted(set(brain_regions1.groups.keys()).intersection(set(brain_regions2.groups.keys())))
-
-removed_cell_tracker = 0
-all_matches = np.zeros(len(full_adata1), dtype=(np.int32, 2))
-all_matches_tracker = 0
-
-for category in common_categories:
-    indices1 = brain_regions1.groups[category]
-    indices2 = brain_regions2.groups[category]
-
-    # adata1_subset = full_adata1[full_adata1.obs_names.isin(indices1)]
-    # adata2_subset = full_adata2[full_adata2.obs_names.isin(indices2)]
-
-    adata1_subset = full_adata1[indices1]
-    adata2_subset = full_adata2[indices2]
-
-    print(f"Calculating matches for region: {category}")
-    print(adata1_subset)
-    print(adata2_subset)
-    match(adata1_subset, adata2_subset)
-
-print(f"Total removed cells: {removed_cell_tracker}")
-print(all_matches)
-
-# Write matches to disk
-np.save('matches.npy', all_matches)
-
-neighours_fig.set_xlabel('X Coordinate')
-neighours_fig.set_ylabel('Y Coordinate')
-neighours_fig.legend()
-print("Plotting Done.")
-
-print(f'Script took: {time.time() - start_time}')
