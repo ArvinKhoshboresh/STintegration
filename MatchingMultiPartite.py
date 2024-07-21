@@ -3,10 +3,10 @@ from ortools.linear_solver import pywraplp
 import sys
 import scanpy as sc
 import time
-
 from scipy.sparse import dok_matrix
 from scipy.spatial import KDTree
 import math
+
 
 def extract_coords(adata):
     x = adata.obs['CCF_AP_axis'].values
@@ -176,7 +176,7 @@ num_neighbours = 150
 
 cut_data = True
 if cut_data:
-    cut_data_factor = 8000
+    cut_data_factor = 16000
     for idx in range(0, len(adata_struct)):
         num_cells = adata_struct[idx].shape[0]
         indices = np.random.permutation(num_cells)
@@ -185,7 +185,8 @@ if cut_data:
 
     print('WARNING: Data split')
 
-longest_side = max(adata_struct, key=lambda adata: adata.shape[0])
+longest_side = len(max(adata_struct, key=lambda adata: adata.shape[0]))
+print(f"LONGEST SIDE: {longest_side}")
 
 combined_distances_matrix, size = create_data_model(adata_struct)
 solve_assignment(combined_distances_matrix, size)
