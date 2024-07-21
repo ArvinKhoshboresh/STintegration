@@ -3,6 +3,8 @@ from ortools.linear_solver import pywraplp
 import sys
 import scanpy as sc
 import time
+
+from scipy.sparse import dok_matrix
 from scipy.spatial import KDTree
 import math
 
@@ -32,7 +34,7 @@ def distance_matrix(adata1, adata2, num_neighbours):
     expression_matrix1 = adata1.X.toarray()
     expression_matrix2 = adata2.X.toarray()
 
-    distances_matrix = np.full((len(coords1), len(coords2)), 2147483647, dtype=np.uint32)
+    distances_matrix = dok_matrix((longest_side, longest_side), dtype=np.uint32)
 
     print("Calculating Distances...")
     time2 = time.time()
@@ -76,23 +78,30 @@ def distance_matrix(adata1, adata2, num_neighbours):
     return distances_matrix
 
 
-def create_data_model(adata1, adata2, adata3, adata4):
+def create_data_model(data_struct):
     # Example cost matrices for 4 datasets with 3 samples each MUST BE SQUARE FOR NOW
-    cost_matrix_1_2 = np.random.rand(3, 3)
-    cost_matrix_1_3 = np.random.rand(3, 3)
-    cost_matrix_1_4 = np.random.rand(3, 3)
-    cost_matrix_2_3 = np.random.rand(3, 3)
-    cost_matrix_2_4 = np.random.rand(3, 3)
-    cost_matrix_3_4 = np.random.rand(3, 3)
+    # cost_matrix_1_2 = np.random.rand(3, 3)
+    # cost_matrix_1_3 = np.random.rand(3, 3)
+    # cost_matrix_1_4 = np.random.rand(3, 3)
+    # cost_matrix_2_3 = np.random.rand(3, 3)
+    # cost_matrix_2_4 = np.random.rand(3, 3)
+    # cost_matrix_3_4 = np.random.rand(3, 3)
 
-    size = cost_matrix_1_2.shape[0]
-    combined_distances_matrix = np.zeros((size, size, size, size))
+    cost_matrix_1_2 = distance_matrix(data_struct[0], data_struct[1], num_neighbours)
+    cost_matrix_1_3 = distance_matrix(data_struct[0], data_struct[2], num_neighbours)
+    cost_matrix_1_4 = distance_matrix(data_struct[0], data_struct[3], num_neighbours)
+    cost_matrix_2_3 = distance_matrix(data_struct[1], data_struct[2], num_neighbours)
+    cost_matrix_2_4 = distance_matrix(data_struct[1], data_struct[3], num_neighbours)
+    cost_matrix_3_4 = distance_matrix(data_struct[2], data_struct[3], num_neighbours)
 
-    for i in range(size):
-        for j in range(size):
-            for k in range(size):
-                for l in range(size):
-                    combined_distances_matrix[i, j, k, l] = (
+    n = longest_side
+    combined_distances_matrix = dok_matrix((n ** 4, n ** 4))
+
+    for i in range(0, n):
+        for j in range(0, n):
+            for k in range(0, n):
+                for l in range(0, n):
+                    combined_distances_matrix[(i * n**3 + j * n**2 + k * n + l), (i * n**3 + j * n**2 + k * n + l)] = (
                             cost_matrix_1_2[i, j] +
                             cost_matrix_1_3[i, k] +
                             cost_matrix_1_4[i, l] +
@@ -101,34 +110,36 @@ def create_data_model(adata1, adata2, adata3, adata4):
                             cost_matrix_3_4[k, l]
                     )
 
-    return combined_distances_matrix, size
+    return combined_distances_matrix, n
 
 
-def solve_assignment(combined_distances_matrix, size):
+def solve_assignment(combined_distances_matrix, n):
     # Create the mip solver with the SCIP backend.
     solver = pywraplp.Solver.CreateSolver('SCIP')
 
     # Create decision variables
     x = {}
-    for i in range(size):
-        for j in range(size):
-            for k in range(size):
-                for l in range(size):
+    for i in range(n):
+        for j in range(n):
+            for k in range(n):
+                for l in range(n):
                     x[i, j, k, l] = solver.BoolVar(f'x[{i},{j},{k},{l}]')
 
     # Define the objective function
-    solver.Minimize(solver.Sum(combined_distances_matrix[i, j, k, l] * x[i, j, k, l]
-                               for i in range(size) for j in range(size) for k in range(size) for l in range(size)))
+    solver.Minimize(solver.Sum(combined_distances_matrix[(i * n**3 + j * n**2 + k * n + l), (i * n**3 +
+                                                          j * n**2 + k * n + l)] * x[(i, j, k, l)]
+                               for i in range(n) for j in range(n) for k in range(n) for l in range(n)
+                               if (i * n**3 + j * n**2 + k * n + l) in combined_distances_matrix))
 
     # Constraints: each sample should be assigned exactly once in each dimension
-    for i in range(size):
-        solver.Add(solver.Sum(x[i, j, k, l] for j in range(size) for k in range(size) for l in range(size)) == 1)
-    for j in range(size):
-        solver.Add(solver.Sum(x[i, j, k, l] for i in range(size) for k in range(size) for l in range(size)) == 1)
-    for k in range(size):
-        solver.Add(solver.Sum(x[i, j, k, l] for i in range(size) for j in range(size) for l in range(size)) == 1)
-    for l in range(size):
-        solver.Add(solver.Sum(x[i, j, k, l] for i in range(size) for j in range(size) for k in range(size)) == 1)
+    for i in range(n):
+        solver.Add(solver.Sum(x[i, j, k, l] for j in range(n) for k in range(n) for l in range(n)) == 1)
+    for j in range(n):
+        solver.Add(solver.Sum(x[i, j, k, l] for i in range(n) for k in range(n) for l in range(n)) == 1)
+    for k in range(n):
+        solver.Add(solver.Sum(x[i, j, k, l] for i in range(n) for j in range(n) for l in range(n)) == 1)
+    for l in range(n):
+        solver.Add(solver.Sum(x[i, j, k, l] for i in range(n) for j in range(n) for k in range(n)) == 1)
 
     # Solve the problem
     status = solver.Solve()
@@ -136,10 +147,10 @@ def solve_assignment(combined_distances_matrix, size):
     if status == pywraplp.Solver.OPTIMAL:
         print('Solution:')
         assignments = []
-        for i in range(size):
-            for j in range(size):
-                for k in range(size):
-                    for l in range(size):
+        for i in range(n):
+            for j in range(n):
+                for k in range(n):
+                    for l in range(n):
                         if x[i, j, k, l].solution_value() == 1:
                             assignments.append((i, j, k, l))
                             print(f'Sample {i} from Dataset A assigned to Sample {j} from Dataset B, '
@@ -155,14 +166,28 @@ adata2_path = sys.argv[2]
 adata3_path = sys.argv[3]
 adata4_path = sys.argv[4]
 
-full_adata1 = sc.read_h5ad(adata1_path)
-full_adata2 = sc.read_h5ad(adata2_path)
-full_adata3 = sc.read_h5ad(adata3_path)
-full_adata4 = sc.read_h5ad(adata4_path)
+adata_struct = []
+adata_struct.append(sc.read_h5ad(adata1_path))
+adata_struct.append(sc.read_h5ad(adata2_path))
+adata_struct.append(sc.read_h5ad(adata3_path))
+adata_struct.append(sc.read_h5ad(adata4_path))
 
 num_neighbours = 150
 
-combined_distances_matrix, size = create_data_model(full_adata1, full_adata2, full_adata3, full_adata4)
+cut_data = True
+if cut_data:
+    cut_data_factor = 8000
+    for idx in range(0, len(adata_struct)):
+        num_cells = adata_struct[idx].shape[0]
+        indices = np.random.permutation(num_cells)
+        split = indices[:num_cells // cut_data_factor]
+        adata_struct[idx] = adata_struct[idx][split].copy()
+
+    print('WARNING: Data split')
+
+longest_side = max(adata_struct, key=lambda adata: adata.shape[0])
+
+combined_distances_matrix, size = create_data_model(adata_struct)
 solve_assignment(combined_distances_matrix, size)
 
 
