@@ -1,11 +1,11 @@
 import numpy as np
-from ortools.linear_solver import pywraplp
 import sys
 import scanpy as sc
 import time
 from scipy.sparse import dok_matrix
 from scipy.spatial import KDTree
 import math
+import random
 
 
 def extract_coords(adata):
@@ -22,6 +22,8 @@ def weighted_distance(distance, scale, max_distance):
 
 def distance_matrix(adata1, adata2, num_neighbours):
 
+    print(f"Regions: \n{adata1}\n{adata2}")
+
     coords1 = extract_coords(adata1)
     coords2 = extract_coords(adata2)
     kdtree2 = KDTree(coords2)
@@ -33,7 +35,7 @@ def distance_matrix(adata1, adata2, num_neighbours):
     expression_matrix1 = adata1.X.toarray()
     expression_matrix2 = adata2.X.toarray()
 
-    distances_matrix = dok_matrix((longest_side, longest_side), dtype=np.uint32)
+    distances_matrix = dok_matrix((n, n), dtype=np.uint32)
 
     print("Calculating Distances...")
     time2 = time.time()
@@ -77,86 +79,47 @@ def distance_matrix(adata1, adata2, num_neighbours):
     return distances_matrix
 
 
-def create_data_model(data_struct):
-    # Example cost matrices for 4 datasets with 3 samples each MUST BE SQUARE FOR NOW
-    # cost_matrix_1_2 = np.random.rand(3, 3)
-    # cost_matrix_1_3 = np.random.rand(3, 3)
-    # cost_matrix_1_4 = np.random.rand(3, 3)
-    # cost_matrix_2_3 = np.random.rand(3, 3)
-    # cost_matrix_2_4 = np.random.rand(3, 3)
-    # cost_matrix_3_4 = np.random.rand(3, 3)
+def simulated_annealing(combined_cost_matrix, n, initial_temp=100, cooling_rate=0.95, max_iter=1000):
+    def cost(solution):
+        return sum(combined_cost_matrix[i, solution[i]] for i in range(n**4) if (i, solution[i]) in combined_cost_matrix)
 
-    cost_matrix_1_2 = distance_matrix(data_struct[0], data_struct[1], num_neighbours)
-    cost_matrix_1_3 = distance_matrix(data_struct[0], data_struct[2], num_neighbours)
-    cost_matrix_1_4 = distance_matrix(data_struct[0], data_struct[3], num_neighbours)
-    cost_matrix_2_3 = distance_matrix(data_struct[1], data_struct[2], num_neighbours)
-    cost_matrix_2_4 = distance_matrix(data_struct[1], data_struct[3], num_neighbours)
-    cost_matrix_3_4 = distance_matrix(data_struct[2], data_struct[3], num_neighbours)
+    def get_neighbors(solution):
+        neighbors = []
+        for i in range(len(solution)):
+            for j in range(i + 1, len(solution)):
+                new_solution = solution.copy()
+                new_solution[i], new_solution[j] = new_solution[j], new_solution[i]
+                if all((idx, val) in combined_cost_matrix for idx, val in enumerate(new_solution)):
+                    neighbors.append(new_solution)
+        return neighbors
 
-    n = longest_side
-    combined_distances_matrix = dok_matrix((n ** 4, n ** 4))
+    current_solution = list(range(n**4))
+    current_cost = cost(current_solution)
+    best_solution = current_solution[:]
+    best_cost = current_cost
 
-    for i in range(0, n):
-        for j in range(0, n):
-            for k in range(0, n):
-                for l in range(0, n):
-                    combined_distances_matrix[(i * n**3 + j * n**2 + k * n + l), (i * n**3 + j * n**2 + k * n + l)] = (
-                            cost_matrix_1_2[i, j] +
-                            cost_matrix_1_3[i, k] +
-                            cost_matrix_1_4[i, l] +
-                            cost_matrix_2_3[j, k] +
-                            cost_matrix_2_4[j, l] +
-                            cost_matrix_3_4[k, l]
-                    )
+    temp = initial_temp
 
-    return combined_distances_matrix, n
+    for _ in range(max_iter):
+        neighbors = get_neighbors(current_solution)
+        if not neighbors:
+            break
 
+        new_solution = random.choice(neighbors)
+        new_cost = cost(new_solution)
 
-def solve_assignment(combined_distances_matrix, n):
-    # Create the mip solver with the SCIP backend.
-    solver = pywraplp.Solver.CreateSolver('SCIP')
+        if new_cost < current_cost or random.uniform(0, 1) < np.exp((current_cost - new_cost) / temp):
+            current_solution = new_solution
+            current_cost = new_cost
 
-    # Create decision variables
-    x = {}
-    for i in range(n):
-        for j in range(n):
-            for k in range(n):
-                for l in range(n):
-                    x[i, j, k, l] = solver.BoolVar(f'x[{i},{j},{k},{l}]')
+        if current_cost < best_cost:
+            best_solution = current_solution[:]
+            best_cost = current_cost
 
-    # Define the objective function
-    solver.Minimize(solver.Sum(combined_distances_matrix[(i * n**3 + j * n**2 + k * n + l), (i * n**3 +
-                                                          j * n**2 + k * n + l)] * x[(i, j, k, l)]
-                               for i in range(n) for j in range(n) for k in range(n) for l in range(n)
-                               if (i * n**3 + j * n**2 + k * n + l) in combined_distances_matrix))
+        temp *= cooling_rate
 
-    # Constraints: each sample should be assigned exactly once in each dimension
-    for i in range(n):
-        solver.Add(solver.Sum(x[i, j, k, l] for j in range(n) for k in range(n) for l in range(n)) == 1)
-    for j in range(n):
-        solver.Add(solver.Sum(x[i, j, k, l] for i in range(n) for k in range(n) for l in range(n)) == 1)
-    for k in range(n):
-        solver.Add(solver.Sum(x[i, j, k, l] for i in range(n) for j in range(n) for l in range(n)) == 1)
-    for l in range(n):
-        solver.Add(solver.Sum(x[i, j, k, l] for i in range(n) for j in range(n) for k in range(n)) == 1)
-
-    # Solve the problem
-    status = solver.Solve()
-
-    if status == pywraplp.Solver.OPTIMAL:
-        print('Solution:')
-        assignments = []
-        for i in range(n):
-            for j in range(n):
-                for k in range(n):
-                    for l in range(n):
-                        if x[i, j, k, l].solution_value() == 1:
-                            assignments.append((i, j, k, l))
-                            print(f'Sample {i} from Dataset A assigned to Sample {j} from Dataset B, '
-                                  f'Sample {k} from Dataset C, Sample {l} from Dataset D')
-        return assignments
-    else:
-        print('The problem does not have an optimal solution.')
+    assignments = [np.unravel_index(i, (n, n, n, n)) for i in best_solution[:n]]
+    return assignments
 
 
 # Load AnnData objects
@@ -175,7 +138,7 @@ num_neighbours = 150
 
 cut_data = True
 if cut_data:
-    cut_data_factor = 16000
+    cut_data_factor = 20000
     for idx in range(0, len(adata_struct)):
         num_cells = adata_struct[idx].shape[0]
         indices = np.random.permutation(num_cells)
@@ -184,10 +147,35 @@ if cut_data:
 
     print('WARNING: Data split')
 
-longest_side = len(max(adata_struct, key=lambda adata: adata.shape[0]))
-print(f"LONGEST SIDE: {longest_side}")
+n = len(max(adata_struct, key=lambda adata: adata.shape[0]))
+print(f"LONGEST SIDE: {n}")
 
-combined_distances_matrix, size = create_data_model(adata_struct)
-solve_assignment(combined_distances_matrix, size)
+cost_matrix_1_2 = distance_matrix(adata_struct[0], adata_struct[1], num_neighbours)
+cost_matrix_1_3 = distance_matrix(adata_struct[0], adata_struct[2], num_neighbours)
+cost_matrix_1_4 = distance_matrix(adata_struct[0], adata_struct[3], num_neighbours)
+cost_matrix_2_3 = distance_matrix(adata_struct[1], adata_struct[2], num_neighbours)
+cost_matrix_2_4 = distance_matrix(adata_struct[1], adata_struct[3], num_neighbours)
+cost_matrix_3_4 = distance_matrix(adata_struct[2], adata_struct[3], num_neighbours)
+
+combined_distances_matrix = dok_matrix((n ** 4, n ** 4))
+
+for i in range(0, n):
+    for j in range(0, n):
+        for k in range(0, n):
+            for l in range(0, n):
+                combined_distances_matrix[(i * n**3 + j * n**2 + k * n + l), (i * n**3 + j * n**2 + k * n + l)] = (
+                        cost_matrix_1_2[i, j] +
+                        cost_matrix_1_3[i, k] +
+                        cost_matrix_1_4[i, l] +
+                        cost_matrix_2_3[j, k] +
+                        cost_matrix_2_4[j, l] +
+                        cost_matrix_3_4[k, l])
+
+
+assignments = simulated_annealing(combined_distances_matrix, n)
+
+for a in assignments:
+    print(f'Sample {a[0]} from Dataset A assigned to Sample {a[1]} from Dataset B, '
+          f'Sample {a[2]} from Dataset C, Sample {a[3]} from Dataset D')
 
 
