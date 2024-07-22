@@ -2,7 +2,7 @@ import numpy as np
 import sys
 import scanpy as sc
 import time
-from scipy.sparse import dok_matrix
+from scipy.sparse import dok_matrix, block_diag
 from scipy.spatial import KDTree
 import math
 import random
@@ -79,21 +79,30 @@ def distance_matrix(adata1, adata2, num_neighbours):
     return distances_matrix
 
 
-def simulated_annealing(combined_cost_matrix, n, initial_temp=100, cooling_rate=0.95, max_iter=1000):
+def simulated_annealing(combined_cost_matrix, n, initial_temp=100, cooling_rate=0.95, max_iter=10):
     def cost(solution):
-        return sum(combined_cost_matrix[i, solution[i]] for i in range(n**4) if (i, solution[i]) in combined_cost_matrix)
+        return sum(combined_cost_matrix[i * n ** 3 + j * n ** 2 + k * n + l, i * n ** 3 + j * n ** 2 + k * n + l]
+                   for (i, j, k, l) in solution)
 
     def get_neighbors(solution):
         neighbors = []
-        for i in range(len(solution)):
-            for j in range(i + 1, len(solution)):
-                new_solution = solution.copy()
-                new_solution[i], new_solution[j] = new_solution[j], new_solution[i]
-                if all((idx, val) in combined_cost_matrix for idx, val in enumerate(new_solution)):
+        for idx in range(len(solution)):
+            for swap_idx in range(idx + 1, len(solution)):
+                new_solution = solution[:]
+                new_solution[idx], new_solution[swap_idx] = new_solution[swap_idx], new_solution[idx]
+                if all((
+                       i * n ** 3 + j * n ** 2 + k * n + l, i * n ** 3 + j * n ** 2 + k * n + l) in combined_cost_matrix
+                       for (i, j, k, l) in new_solution) and len(set(sum(new_solution, ()))) == n * 4:
                     neighbors.append(new_solution)
         return neighbors
 
-    current_solution = list(range(n**4))
+        # Initial solution
+
+    initial_solution = [(i, j, k, l) for i in range(n) for j in range(n) for k in range(n) for l in range(n)
+                        if (i * n ** 3 + j * n ** 2 + k * n + l,
+                            i * n ** 3 + j * n ** 2 + k * n + l) in combined_cost_matrix]
+    random.shuffle(initial_solution)
+    current_solution = initial_solution[:n]  # Ensure it has n tuples
     current_cost = cost(current_solution)
     best_solution = current_solution[:]
     best_cost = current_cost
@@ -118,8 +127,7 @@ def simulated_annealing(combined_cost_matrix, n, initial_temp=100, cooling_rate=
 
         temp *= cooling_rate
 
-    assignments = [np.unravel_index(i, (n, n, n, n)) for i in best_solution[:n]]
-    return assignments
+    return best_solution
 
 
 # Load AnnData objects
@@ -138,7 +146,7 @@ num_neighbours = 150
 
 cut_data = True
 if cut_data:
-    cut_data_factor = 20000
+    cut_data_factor = 30000
     for idx in range(0, len(adata_struct)):
         num_cells = adata_struct[idx].shape[0]
         indices = np.random.permutation(num_cells)
@@ -150,26 +158,15 @@ if cut_data:
 n = len(max(adata_struct, key=lambda adata: adata.shape[0]))
 print(f"LONGEST SIDE: {n}")
 
-cost_matrix_1_2 = distance_matrix(adata_struct[0], adata_struct[1], num_neighbours)
-cost_matrix_1_3 = distance_matrix(adata_struct[0], adata_struct[2], num_neighbours)
-cost_matrix_1_4 = distance_matrix(adata_struct[0], adata_struct[3], num_neighbours)
-cost_matrix_2_3 = distance_matrix(adata_struct[1], adata_struct[2], num_neighbours)
-cost_matrix_2_4 = distance_matrix(adata_struct[1], adata_struct[3], num_neighbours)
-cost_matrix_3_4 = distance_matrix(adata_struct[2], adata_struct[3], num_neighbours)
+cost_matrix_struct = [
+    distance_matrix(adata_struct[0], adata_struct[1], num_neighbours),
+    distance_matrix(adata_struct[0], adata_struct[2], num_neighbours),
+    distance_matrix(adata_struct[0], adata_struct[3], num_neighbours),
+    distance_matrix(adata_struct[1], adata_struct[2], num_neighbours),
+    distance_matrix(adata_struct[1], adata_struct[3], num_neighbours),
+    distance_matrix(adata_struct[2], adata_struct[3], num_neighbours)]
 
-combined_distances_matrix = dok_matrix((n ** 4, n ** 4))
-
-for i in range(0, n):
-    for j in range(0, n):
-        for k in range(0, n):
-            for l in range(0, n):
-                combined_distances_matrix[(i * n**3 + j * n**2 + k * n + l), (i * n**3 + j * n**2 + k * n + l)] = (
-                        cost_matrix_1_2[i, j] +
-                        cost_matrix_1_3[i, k] +
-                        cost_matrix_1_4[i, l] +
-                        cost_matrix_2_3[j, k] +
-                        cost_matrix_2_4[j, l] +
-                        cost_matrix_3_4[k, l])
+combined_distances_matrix = block_diag(cost_matrix_struct, format='dok')
 
 
 assignments = simulated_annealing(combined_distances_matrix, n)
