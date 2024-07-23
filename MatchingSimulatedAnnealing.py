@@ -79,7 +79,7 @@ def distance_matrix(adata1, adata2, num_neighbours):
     return distances_matrix
 
 
-def simulated_annealing(combined_cost_matrix, n, initial_temp=100, cooling_rate=0.95, max_iter=10):
+def simulated_annealing(combined_cost_matrix, n, initial_temp=100, cooling_rate=0.95, max_iter=1000):
     def cost(solution):
         return sum(combined_cost_matrix[i * n ** 3 + j * n ** 2 + k * n + l, i * n ** 3 + j * n ** 2 + k * n + l]
                    for (i, j, k, l) in solution)
@@ -101,6 +101,7 @@ def simulated_annealing(combined_cost_matrix, n, initial_temp=100, cooling_rate=
     initial_solution = [(i, j, k, l) for i in range(n) for j in range(n) for k in range(n) for l in range(n)
                         if (i * n ** 3 + j * n ** 2 + k * n + l,
                             i * n ** 3 + j * n ** 2 + k * n + l) in combined_cost_matrix]
+    print(initial_solution)
     random.shuffle(initial_solution)
     current_solution = initial_solution[:n]  # Ensure it has n tuples
     current_cost = cost(current_solution)

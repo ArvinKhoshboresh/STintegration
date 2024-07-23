@@ -49,23 +49,24 @@ min_size = min(len(data) for data in datasets)
 
 # Concatenate datasets for clustering
 all_data = np.concatenate(datasets, axis=0)
-print(f"{all_data}\n")
+print(f"All data: {all_data}\n")
 
 # Fit k-means to form clusters
 kmeans = KMeans(n_clusters=min_size).fit(all_data)
 cluster_centers = kmeans.cluster_centers_
 
 # Create a cost matrix for the assignment problem
-cost_matrix = np.zeros((min_size * len(datasets), min_size))
+cost_matrices = [np.zeros((len(dataset), min_size)) for dataset in datasets]
 
 tracker = 0
 for i, data in enumerate(datasets):
     start_idx = tracker
     end_idx = start_idx + len(data)
     # Compute pairwise distances
-    print(data[:])
     distances = np.linalg.norm(data[:, np.newaxis] - cluster_centers, axis=2)
-    cost_matrix[start_idx:end_idx, :] = distances
+    cost_matrices[i] = distances
+
+print(cost_matrices)
 
 # Solve the assignment problem
 row_ind, col_ind = linear_sum_assignment(cost_matrix)
