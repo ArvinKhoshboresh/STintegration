@@ -1,8 +1,10 @@
+import itertools
+
 import numpy as np
 import sys
 import scanpy as sc
 import time
-from scipy.sparse import dok_matrix, block_diag
+from scipy.sparse import dok_matrix, block_diag, coo_matrix, lil_matrix
 from scipy.spatial import KDTree
 import math
 import random
@@ -35,7 +37,7 @@ def distance_matrix(adata1, adata2, num_neighbours):
     expression_matrix1 = adata1.X.toarray()
     expression_matrix2 = adata2.X.toarray()
 
-    distances_matrix = dok_matrix((n, n), dtype=np.uint32)
+    distances_matrix = lil_matrix((n, n), dtype=np.uint32)
 
     print("Calculating Distances...")
     time2 = time.time()
@@ -76,14 +78,19 @@ def distance_matrix(adata1, adata2, num_neighbours):
 
     print(f"Time to Calculate Euclidian Distances: {time.time() - time2}s")
 
-    return distances_matrix
+    return distances_matrix.tocoo()
 
 
 def simulated_annealing(combined_cost_matrix, n, initial_temp=100, cooling_rate=0.95, max_iter=1000):
     def cost(solution):
-        return sum(combined_cost_matrix[i * n ** 3 + j * n ** 2 + k * n + l, i * n ** 3 + j * n ** 2 + k * n + l]
-                   for (i, j, k, l) in solution)
+        total_sum = 0
+        for pair in itertools.combinations(solution, 2):
+            print(f"{combined_cost_matrix[pair[0]][pair[1]]} {combined_cost_matrix[pair[1]][pair[0]]}")
+            result = combined_cost_matrix[pair[0]][pair[1]] + combined_cost_matrix[pair[1]][pair[0]]
+            total_sum += result
+        return total_sum
 
+    # TODO: GET NEIGHBOURS, make cost matrix work for this
     def get_neighbors(solution):
         neighbors = []
         for idx in range(len(solution)):
@@ -147,7 +154,7 @@ num_neighbours = 150
 
 cut_data = True
 if cut_data:
-    cut_data_factor = 30000
+    cut_data_factor = 400000
     for idx in range(0, len(adata_struct)):
         num_cells = adata_struct[idx].shape[0]
         indices = np.random.permutation(num_cells)
@@ -160,6 +167,7 @@ n = len(max(adata_struct, key=lambda adata: adata.shape[0]))
 print(f"LONGEST SIDE: {n}")
 
 cost_matrix_struct = [
+
     distance_matrix(adata_struct[0], adata_struct[1], num_neighbours),
     distance_matrix(adata_struct[0], adata_struct[2], num_neighbours),
     distance_matrix(adata_struct[0], adata_struct[3], num_neighbours),
@@ -167,13 +175,24 @@ cost_matrix_struct = [
     distance_matrix(adata_struct[1], adata_struct[3], num_neighbours),
     distance_matrix(adata_struct[2], adata_struct[3], num_neighbours)]
 
-combined_distances_matrix = block_diag(cost_matrix_struct, format='dok')
-
+combined_distances_matrix = lil_matrix((n*(len(adata_struct)-1), n*len(adata_struct)))
+struct_tracker = 0
+rows, cols, data = [], [], []
+for i in range(len(adata_struct)):
+    for j in range(len(adata_struct)):
+        if j <= i: continue
+        cost_matrix = cost_matrix_struct[struct_tracker]
+        global_rows = cost_matrix.row + i * n
+        global_cols = cost_matrix.col + j * n
+        rows.extend(global_rows)
+        cols.extend(global_cols)
+        data.extend(cost_matrix.data)
+        struct_tracker += 1
+combined_distances_matrix[rows, cols] = data
 
 assignments = simulated_annealing(combined_distances_matrix, n)
 
 for a in assignments:
     print(f'Sample {a[0]} from Dataset A assigned to Sample {a[1]} from Dataset B, '
           f'Sample {a[2]} from Dataset C, Sample {a[3]} from Dataset D')
-
 
