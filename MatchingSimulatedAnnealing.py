@@ -3,6 +3,7 @@ import numpy as np
 import sys
 import scanpy as sc
 import time
+from matplotlib import pyplot as plt
 from scipy.sparse import lil_matrix
 from scipy.spatial import KDTree
 import math
@@ -80,15 +81,24 @@ def distance_matrix(adata1, adata2, num_neighbours):
     return distances_matrix.tocoo()
 
 
-def simulated_annealing(combined_cost_matrix, n, initial_temp=100, cooling_rate=0.95, max_iter=1000000):
+def simulated_annealing(combined_cost_matrix, n, initial_temp=100, cooling_rate=0.999, max_iter=100):
     def cost(solution):
         total_sum = 0
-        for touple in solution:
-            for pair in itertools.combinations(touple, 2):
-                result = combined_cost_matrix[pair[0], pair[1]] + combined_cost_matrix[pair[1], pair[0]]
-                if int(result) == 0:
-                    return np.inf
-                total_sum += result
+        for match in solution:
+            result = (combined_cost_matrix[match[0], match[1]] +
+                      combined_cost_matrix[match[0], match[2]] +
+                      combined_cost_matrix[match[0], match[3]] +
+                      combined_cost_matrix[match[1], match[2]] +
+                      combined_cost_matrix[match[1], match[3]] +
+                      combined_cost_matrix[match[2], match[3]])
+            # for pair in itertools.combinations(match, 2):
+            #     result = combined_cost_matrix[pair[0], pair[1]] + combined_cost_matrix[pair[1], pair[0]]
+            #     if int(result) == 0:
+            #         return np.inf
+            #     total_sum += result
+            if int(result) == 0:
+                return np.inf
+            total_sum += result
         return total_sum
 
     def get_neighbors(solution):
@@ -96,18 +106,16 @@ def simulated_annealing(combined_cost_matrix, n, initial_temp=100, cooling_rate=
         for idx in range(len(solution)):
             for swap_idx in range(idx + 1, len(solution)):
                 for match_idx in range(len(solution[idx])):
-                    new_solution = solution
-                    new_solution[idx][match_idx], solution[swap_idx][match_idx] = (solution[swap_idx][match_idx],
-                                                                                     new_solution[idx][match_idx])
+                    new_solution = [row[:] for row in solution]
+                    new_solution[idx][match_idx], new_solution[swap_idx][match_idx] = new_solution[swap_idx][match_idx], new_solution[idx][match_idx]
                     neighbors.append(new_solution)
         return neighbors
 
-    initial_solution = [[i, i, i, i] for i in range(n)]
-    print(initial_solution)
-    random.shuffle(initial_solution)
-    current_solution = initial_solution[:n]  # Ensure it has n tuples
+    current_solution = [[i, i, i, i] for i in range(n)]
+    random.shuffle(current_solution)
+    print(current_solution)
     current_cost = cost(current_solution)
-    best_solution = current_solution[:]
+    best_solution = current_solution
     best_cost = current_cost
 
     temp = initial_temp
@@ -117,21 +125,26 @@ def simulated_annealing(combined_cost_matrix, n, initial_temp=100, cooling_rate=
         if not neighbors:
             break
 
-        new_solution = random.choice(neighbors)
-        new_cost = cost(new_solution)
+        while True:
 
-        if new_cost < current_cost or random.uniform(0, 1) < np.exp((current_cost - new_cost) / temp):
-            current_solution = new_solution
-            current_cost = new_cost
+            new_solution = random.choice(neighbors)
+            new_cost = cost(new_solution)
 
-        if current_cost < best_cost:
-            best_solution = current_solution[:]
-            best_cost = current_cost
+            if new_cost < current_cost or random.uniform(0, 1) < np.exp((current_cost - new_cost) / temp):
+                current_solution = new_solution
+                current_cost = new_cost
+                print("moved")
 
-        temp *= cooling_rate
+                if current_cost < best_cost:
+                    best_solution = current_solution[:]
+                    best_cost = current_cost
+                break
+
+            temp *= cooling_rate
 
     return best_solution
 
+start_time = time.time()
 
 # Load AnnData objects
 adata1_path = sys.argv[1]
@@ -187,7 +200,30 @@ combined_distances_matrix[rows, cols] = data
 
 assignments = simulated_annealing(combined_distances_matrix, n)
 
-for a in assignments:
-    print(f'Sample {a[0]} from Dataset A assigned to Sample {a[1]} from Dataset B, '
-          f'Sample {a[2]} from Dataset C, Sample {a[3]} from Dataset D')
+######################## Plotting ###########################
+coords_struct = [extract_coords(adata) for adata in adata_struct]
+colors = ['red', 'blue', 'green', 'purple', 'orange', 'brown', 'pink', 'gray', 'cyan', 'magenta']
+plt.figure(figsize=(15, 10), dpi=800)
 
+for i, coords in enumerate(coords_struct):
+    plt.scatter(coords[:, 0], coords[:, 1], color=colors[i % len(colors)], label=f'Dataset {i+1}', s=0.2)
+
+valid_assignments = []
+for assignment in assignments:
+    print(assignment)
+    try:
+        points = [coords_struct[i][assignment[i]] for i in range(len(assignment))]
+        points = np.array(points)
+        plt.plot(points[:, 0], points[:, 1], color='gray', linestyle='--', lw=0.03)
+        valid_assignments.append(assignment)
+    except IndexError:
+        print(f"Invalid assignment found and removed: {assignment}")
+
+
+plt.legend()
+plt.xlabel('X Coordinate')
+plt.ylabel('Y Coordinate')
+plt.title('Assignments between datasets')
+plt.savefig(f"Plots/{time.time()}-SA-Matches.png", bbox_inches='tight')
+
+print(f'Script took: {time.time() - start_time}')
