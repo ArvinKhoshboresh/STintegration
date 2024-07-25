@@ -81,7 +81,7 @@ def distance_matrix(adata1, adata2, num_neighbours):
     return distances_matrix.tocoo()
 
 
-def simulated_annealing(combined_cost_matrix, n, initial_temp=100, cooling_rate=0.999, max_iter=100):
+def simulated_annealing(combined_cost_matrix, n, initial_temp=100, cooling_rate=0.999, max_iter=1000):
     def cost(solution):
         total_sum = 0
         for match in solution:
