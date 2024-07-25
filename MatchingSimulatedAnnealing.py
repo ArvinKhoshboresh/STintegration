@@ -1,10 +1,9 @@
 import itertools
-
 import numpy as np
 import sys
 import scanpy as sc
 import time
-from scipy.sparse import dok_matrix, block_diag, coo_matrix, lil_matrix
+from scipy.sparse import lil_matrix
 from scipy.spatial import KDTree
 import math
 import random
@@ -81,33 +80,29 @@ def distance_matrix(adata1, adata2, num_neighbours):
     return distances_matrix.tocoo()
 
 
-def simulated_annealing(combined_cost_matrix, n, initial_temp=100, cooling_rate=0.95, max_iter=1000):
+def simulated_annealing(combined_cost_matrix, n, initial_temp=100, cooling_rate=0.95, max_iter=1000000):
     def cost(solution):
         total_sum = 0
-        for pair in itertools.combinations(solution, 2):
-            print(f"{combined_cost_matrix[pair[0]][pair[1]]} {combined_cost_matrix[pair[1]][pair[0]]}")
-            result = combined_cost_matrix[pair[0]][pair[1]] + combined_cost_matrix[pair[1]][pair[0]]
-            total_sum += result
+        for touple in solution:
+            for pair in itertools.combinations(touple, 2):
+                result = combined_cost_matrix[pair[0], pair[1]] + combined_cost_matrix[pair[1], pair[0]]
+                if int(result) == 0:
+                    return np.inf
+                total_sum += result
         return total_sum
 
-    # TODO: GET NEIGHBOURS, make cost matrix work for this
     def get_neighbors(solution):
         neighbors = []
         for idx in range(len(solution)):
             for swap_idx in range(idx + 1, len(solution)):
-                new_solution = solution[:]
-                new_solution[idx], new_solution[swap_idx] = new_solution[swap_idx], new_solution[idx]
-                if all((
-                       i * n ** 3 + j * n ** 2 + k * n + l, i * n ** 3 + j * n ** 2 + k * n + l) in combined_cost_matrix
-                       for (i, j, k, l) in new_solution) and len(set(sum(new_solution, ()))) == n * 4:
+                for match_idx in range(len(solution[idx])):
+                    new_solution = solution
+                    new_solution[idx][match_idx], solution[swap_idx][match_idx] = (solution[swap_idx][match_idx],
+                                                                                     new_solution[idx][match_idx])
                     neighbors.append(new_solution)
         return neighbors
 
-        # Initial solution
-
-    initial_solution = [(i, j, k, l) for i in range(n) for j in range(n) for k in range(n) for l in range(n)
-                        if (i * n ** 3 + j * n ** 2 + k * n + l,
-                            i * n ** 3 + j * n ** 2 + k * n + l) in combined_cost_matrix]
+    initial_solution = [[i, i, i, i] for i in range(n)]
     print(initial_solution)
     random.shuffle(initial_solution)
     current_solution = initial_solution[:n]  # Ensure it has n tuples
@@ -154,7 +149,7 @@ num_neighbours = 150
 
 cut_data = True
 if cut_data:
-    cut_data_factor = 400000
+    cut_data_factor = 100000
     for idx in range(0, len(adata_struct)):
         num_cells = adata_struct[idx].shape[0]
         indices = np.random.permutation(num_cells)
