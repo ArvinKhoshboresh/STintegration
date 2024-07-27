@@ -86,7 +86,7 @@ def match(adata1, adata2):
     expression_matrix2 = adata2.X.toarray()
 
     # Create matrix to hold all distances to each pair in adata2
-    distances_matrix = np.full((len(coords1), len(coords2)), 2147483647, dtype=np.uint32)
+    distances_matrix = np.full((len(coords1), len(coords2)), 2147483647, dtype=np.float32)
 
     print("Calculating Distances...")
     time2 = time.time()
@@ -108,22 +108,27 @@ def match(adata1, adata2):
             spatial_distance = physical_distances[idx]
             expression_distance = expression_distances[idx]
             if spatial_distance > 0 and expression_distance > 0:
-                adjusted_spt_distance = weighted_distance(spatial_distance, 1, (distance_thresholds[cell_idx])) * 2
-                adjusted_expression_distance = expression_distance * 100
+                adjusted_spt_distance = weighted_distance(spatial_distance, 1, (distance_thresholds[cell_idx])) * 1
+                adjusted_expression_distance = expression_distance * 50
                 distances_matrix[cell_idx, neighbour_indices[cell_idx][idx]] = np.add(adjusted_spt_distance,
                                                                                       adjusted_expression_distance)
 
-                # Print results for debugging
-                print(f"\nCell {cell_idx} from adata1 to Cell {neighbour_indices[cell_idx][idx]} from adata2:\n"
-                    f"Calced Distance: {distances_matrix[cell_idx, neighbour_indices[cell_idx][idx]]}\n"
-                    # f"Exp Coords1: {','.join(map(str, expression_matrix1[cell_idx]))}\n"
-                    # f"Exp Coords2: {','.join(map(str, expression_matrix2[neighbour_indices[cell_idx, idx]]))}\n"
-                    f"Calced Exp Distance: {expression_distances[idx]}\n"
-                    f"Adjusted Exp Distance: {adjusted_expression_distance}\n"
-                    f"Spt Coords1: {','.join(map(str, coords1[cell_idx]))}\n"
-                    f"Spt Coords2: {','.join(map(str, coords2[neighbour_indices[cell_idx][idx]]))}\n"
-                    f"Calced Spt Distance: {physical_distances[idx]}\n"
-                    f"Adjusted Spt Distance: {adjusted_spt_distance}\n")
+                # # Print results for debugging
+                # print(f"\nCell {cell_idx} from adata1 to Cell {neighbour_indices[cell_idx][idx]} from adata2:\n"
+                #     f"Calced Distance: {distances_matrix[cell_idx, neighbour_indices[cell_idx][idx]]}\n"
+                #     # f"Exp Coords1: {','.join(map(str, expression_matrix1[cell_idx]))}\n"
+                #     # f"Exp Coords2: {','.join(map(str, expression_matrix2[neighbour_indices[cell_idx, idx]]))}\n"
+                #     f"Calced Exp Distance: {expression_distance}\n"
+                #     f"Adjusted Exp Distance: {adjusted_expression_distance}\n"
+                #     f"Spt Coords1: {','.join(map(str, coords1[cell_idx]))}\n"
+                #     f"Spt Coords2: {','.join(map(str, coords2[neighbour_indices[cell_idx][idx]]))}\n"
+                #     f"Calced Spt Distance: {spatial_distance}\n"
+                #     f"Adjusted Spt Distance: {adjusted_spt_distance}\n")
+
+                # global average_spatial_distance_mult, average_weighted_spatial_mult, cell_counter
+                # average_spatial_distance_mult += expression_distance / spatial_distance
+                # average_weighted_spatial_mult += expression_distance / weighted_distance(spatial_distance, 1, (distance_thresholds[cell_idx]))
+                # cell_counter += 1
 
     print(f"Time to Calculate Euclidian Distances: {time.time() - time2}s")
 
@@ -158,8 +163,8 @@ def match(adata1, adata2):
 
     print(f"Removed cells in this region: {removed_cell_tracker - removed_cells_before_region}")
 
-    plt.savefig(plot_path, bbox_inches='tight')
-    np.save('matches.npy', all_matches)
+    # print(f" average spt mult: {average_spatial_distance_mult / cell_counter}")
+    # print(f" average weighted spt mult: {average_weighted_spatial_mult / cell_counter}")
 
     print(f" Time to Calculate matches and plot: {time.time() - time3}s")
     print(f"Finished calculations for region {adata1[0].obs['CCFname']}\n\n")
@@ -198,17 +203,62 @@ def valid_match(adjusted_distance, cell_coords1, cell_coords2, threshold):
     return False
 
 
+def split_in_eights(adata):
+    # Extract coordinates
+    x = adata.obs['CCF_AP_axis'].values
+    y = adata.obs['CCF_ML_axis'].values
+    z = adata.obs['CCF_DV_axis'].values
+
+    # Find the min and max for each coordinate
+    x_min, x_max = x.min(), x.max()
+    y_min, y_max = y.min(), y.max()
+    z_min, z_max = z.min(), z.max()
+
+    # Calculate midpoints
+    x_mid = (x_min + x_max) / 2
+    y_mid = (y_min + y_max) / 2
+    z_mid = (z_min + z_max) / 2
+
+    # Define the 8 regions
+    regions = [
+        (x < x_mid) & (y < y_mid) & (z < z_mid),
+        (x < x_mid) & (y < y_mid) & (z >= z_mid),
+        (x < x_mid) & (y >= y_mid) & (z < z_mid),
+        (x < x_mid) & (y >= y_mid) & (z >= z_mid),
+        (x >= x_mid) & (y < y_mid) & (z < z_mid),
+        (x >= x_mid) & (y < y_mid) & (z >= z_mid),
+        (x >= x_mid) & (y >= y_mid) & (z < z_mid),
+        (x >= x_mid) & (y >= y_mid) & (z >= z_mid)
+    ]
+
+    # Create a list to hold the sub-AnnData objects
+    sub_adatas = []
+
+    # Loop through each region and create sub-AnnData objects
+    for region in regions:
+        sub_adata = adata[region].copy()  # Make a copy to ensure independence
+        sub_adatas.append(sub_adata)
+
+    return sub_adatas
+
+
+# average_spatial_distance_mult = 0
+# average_weighted_spatial_mult = 0
+# cell_counter = 0
+
 start_time = time.time()
 np.set_printoptions(edgeitems=100)
 
 # Define constants
 absolute_distance_threshold = 100  # In CCF units
 num_neighbours = 300
-plot_path = f"Plots/{time.time()}-AllMatches.png"
 
 # Load AnnData objects
 adata1_path = sys.argv[1]
 adata2_path = sys.argv[2]
+
+matches_name = f"{time.time()}-{adata1_path.split("/")[-1]}-{adata2_path.split("/")[-1]}-Matches.npy"
+plot_path = f"Plots/{time.time()}-{adata1_path.split("/")[-1]}-{adata2_path.split("/")[-1]}-Matches.png"
 
 full_adata1 = sc.read_h5ad(adata1_path)
 full_adata2 = sc.read_h5ad(adata2_path)
@@ -216,6 +266,8 @@ full_adata2 = sc.read_h5ad(adata2_path)
 # Cut data into pieces for faster prototyping
 cut_data = False
 if cut_data:
+    np.random.seed(42)
+
     cut_data_factor = 40
     num_cells = full_adata1.shape[0]
     indices = np.random.permutation(num_cells)
@@ -260,6 +312,10 @@ all_matches = np.zeros(len(full_adata1), dtype=(np.int32, 2))
 all_matches_tracker = 0
 
 for category in common_categories:
+
+    if category != "CP":
+        continue
+
     indices1 = brain_regions1.groups[category]
     indices2 = brain_regions2.groups[category]
 
@@ -269,20 +325,31 @@ for category in common_categories:
     adata1_subset = full_adata1[indices1]
     adata2_subset = full_adata2[indices2]
 
-    print(f"Calculating matches for region: {category}")
-    print(adata1_subset)
-    print(adata2_subset)
-    match(adata1_subset, adata2_subset)
+    if len(adata1_subset) > 100000 or len(adata2_subset) > 100000:
+        adata1_subset_cut_array = split_in_eights(adata1_subset)
+        adata2_subset_cut_array = split_in_eights(adata2_subset)
+        for idx in range(len(adata1_subset_cut_array)):
+            print(f"Calculating matches for region: {category}, Subregion {idx}")
+            print(adata1_subset_cut_array[idx])
+            print(adata2_subset_cut_array[idx])
+            match(adata1_subset_cut_array[idx], adata2_subset_cut_array[idx])
+    else:
+        print(f"Calculating matches for region: {category}")
+        print(adata1_subset)
+        print(adata2_subset)
+        match(adata1_subset, adata2_subset)
 
 print(f"Total removed cells: {removed_cell_tracker}")
 print(all_matches)
 
 # Write matches to disk
-np.save('matches.npy', all_matches)
+np.save(matches_name, all_matches)
 
 neighours_fig.set_xlabel('X Coordinate')
 neighours_fig.set_ylabel('Y Coordinate')
 neighours_fig.legend()
+plt.savefig(plot_path, bbox_inches='tight')
+
 print("Plotting Done.")
 
 # ################## UMAP Matching #################
