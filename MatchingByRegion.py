@@ -113,17 +113,17 @@ def match(adata1, adata2):
                 distances_matrix[cell_idx, neighbour_indices[cell_idx][idx]] = np.add(adjusted_spt_distance,
                                                                                       adjusted_expression_distance)
 
-                # # Print results for debugging
-                # print(f"\nCell {cell_idx} from adata1 to Cell {neighbour_indices[cell_idx][idx]} from adata2:\n"
-                #     f"Calced Distance: {distances_matrix[cell_idx, neighbour_indices[cell_idx][idx]]}\n"
-                #     # f"Exp Coords1: {','.join(map(str, expression_matrix1[cell_idx]))}\n"
-                #     # f"Exp Coords2: {','.join(map(str, expression_matrix2[neighbour_indices[cell_idx, idx]]))}\n"
-                #     f"Calced Exp Distance: {expression_distances[idx]}\n"
-                #     f"Adjusted Exp Distance: {adjusted_expression_distance}\n"
-                #     f"Spt Coords1: {','.join(map(str, coords1[cell_idx]))}\n"
-                #     f"Spt Coords2: {','.join(map(str, coords2[neighbour_indices[cell_idx][idx]]))}\n"
-                #     f"Calced Spt Distance: {physical_distances[idx]}\n"
-                #     f"Adjusted Spt Distance: {adjusted_spt_distance}\n")
+                # Print results for debugging
+                print(f"\nCell {cell_idx} from adata1 to Cell {neighbour_indices[cell_idx][idx]} from adata2:\n"
+                    f"Calced Distance: {distances_matrix[cell_idx, neighbour_indices[cell_idx][idx]]}\n"
+                    # f"Exp Coords1: {','.join(map(str, expression_matrix1[cell_idx]))}\n"
+                    # f"Exp Coords2: {','.join(map(str, expression_matrix2[neighbour_indices[cell_idx, idx]]))}\n"
+                    f"Calced Exp Distance: {expression_distances[idx]}\n"
+                    f"Adjusted Exp Distance: {adjusted_expression_distance}\n"
+                    f"Spt Coords1: {','.join(map(str, coords1[cell_idx]))}\n"
+                    f"Spt Coords2: {','.join(map(str, coords2[neighbour_indices[cell_idx][idx]]))}\n"
+                    f"Calced Spt Distance: {physical_distances[idx]}\n"
+                    f"Adjusted Spt Distance: {adjusted_spt_distance}\n")
 
     print(f"Time to Calculate Euclidian Distances: {time.time() - time2}s")
 

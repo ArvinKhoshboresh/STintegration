@@ -69,7 +69,7 @@ for i, data in enumerate(datasets):
 print(cost_matrices)
 
 # Solve the assignment problem
-row_ind, col_ind = linear_sum_assignment(cost_matrix)
+row_ind, col_ind = linear_sum_assignment(cost_matrices)
 
 # Form the final clusters
 final_clusters = [[] for _ in range(min_size)]
