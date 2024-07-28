@@ -7,18 +7,18 @@ from matplotlib import pyplot as plt
 np.set_printoptions(edgeitems=30)
 
 # Load the h5ad file
-h5ad_path = sys.argv[1]
-h5ad_path = sys.argv[2]
-h5ad_path = sys.argv[3]
-h5ad_path = sys.argv[4]
-adata1 = sc.read_h5ad(h5ad_path)
-adata2 = sc.read_h5ad(h5ad_path)
-adata3 = sc.read_h5ad(h5ad_path)
-adata4 = sc.read_h5ad(h5ad_path)
+h5ad_path1 = sys.argv[1]
+h5ad_path2 = sys.argv[2]
+h5ad_path3 = sys.argv[3]
+h5ad_path4 = sys.argv[4]
+adata1 = sc.read_h5ad(h5ad_path1)
+adata2 = sc.read_h5ad(h5ad_path2)
+adata3 = sc.read_h5ad(h5ad_path3)
+adata4 = sc.read_h5ad(h5ad_path4)
 
 print(adata1)
 
-print(adata1.obs["subclass"].nunique())
+# print(adata1.obs["subclass"].nunique())
 
 
 def extract_coords(adata):
@@ -41,7 +41,7 @@ def extract_coords(adata):
 def flip_coordinates(data):
     # Assuming data is a numpy array of shape (n, 3) with columns [x, y, z]
     flipped_data = data.copy()
-    flipped_data[:, 0] = flipped_data[:, 0] * -1  # Flip x-coordinates
+    flipped_data[:, 2] = -flipped_data[:, 2]  # Flip y-coordinates
     return flipped_data
 
 # coords1 = extract_coords(adata1)
@@ -54,7 +54,7 @@ def flip_coordinates(data):
 # Cut data into pieces for faster prototyping
 cut_data = True
 if cut_data:
-    cut_data_factor = 80
+    cut_data_factor = 40
     num_cells = adata1.shape[0]
     indices = np.random.permutation(num_cells)
     split = indices[:num_cells // cut_data_factor]
@@ -86,8 +86,8 @@ coords4 = extract_coords(adata4)
 # Plot this region in Coronal view
 fig, neighours_fig = plt.subplots(figsize=(15, 10), dpi=800)
 # Plot all cells from both datasets
-neighours_fig.scatter(coords1[:, 2], coords1[:, 1], c='blue', label='adata1', alpha=0.5, s=0.2, linewidths=0.3)
-neighours_fig.scatter(coords2[:, 2], coords2[:, 1], c='red', label='adata2', alpha=0.5, s=0.2, linewidths=0.3)
+neighours_fig.scatter(coords1[:, 2], coords1[:, 1], c='red', label='adata1', alpha=0.5, s=0.2, linewidths=0.3)
+neighours_fig.scatter(coords2[:, 2], coords2[:, 1], c='blue', label='adata2', alpha=0.5, s=0.2, linewidths=0.3)
 neighours_fig.scatter(coords3[:, 2], coords3[:, 1], c='green', label='adata3', alpha=0.5, s=0.2, linewidths=0.3)
 neighours_fig.scatter(coords4[:, 2], coords4[:, 1], c='orange', label='adata4', alpha=0.5, s=0.2, linewidths=0.3)
 # for cell_Idx, cell_coord in enumerate(coords1):
@@ -97,6 +97,40 @@ neighours_fig.scatter(coords4[:, 2], coords4[:, 1], c='orange', label='adata4', 
 neighours_fig.set_xlabel('Z Coordinate')
 neighours_fig.set_ylabel('Y Coordinate')
 plt.savefig('graph.png', bbox_inches='tight')
+
+
+
+# brain_regions1 = adata1.obs.groupby("CCFname")
+# brain_regions2 = adata2.obs.groupby("CCFname")
+# brain_regions3 = adata3.obs.groupby("CCFname")
+# brain_regions4 = adata4.obs.groupby("CCFname")
+#
+# common_categories = sorted(set(brain_regions1.groups.keys()).intersection(set(brain_regions2.groups.keys())))
+#
+# fig, neighours_fig = plt.subplots(figsize=(15, 10), dpi=800)
+#
+# for category in common_categories:
+#
+#     if category != "CP":
+#         continue
+#
+#     indices1 = brain_regions1.groups[category]
+#     indices2 = brain_regions2.groups[category]
+#
+#     adata1_subset = adata1[indices1]
+#     adata2_subset = adata2[indices2]
+#
+#     coords1 = extract_coords(adata1_subset)
+#     coords2 = extract_coords(adata2_subset)
+#
+#     neighours_fig.scatter(coords1[:, 2], coords1[:, 1], c='blue', label='adata1', alpha=0.5, s=0.2, linewidths=0.3)
+#     neighours_fig.scatter(coords2[:, 2], coords2[:, 1], c='red', label='adata2', alpha=0.5, s=0.2, linewidths=0.3)
+#
+#     neighours_fig.set_xlabel('Z Coordinate')
+#     neighours_fig.set_ylabel('Y Coordinate')
+#     plt.savefig('graph.png', bbox_inches='tight')
+
+
 
 # # Extract the specified columns from obs
 # columns_to_extract = ['CCFano', 'CCFname', 'clustid', 'clustname', 'subclass']
