@@ -38,23 +38,27 @@ def extract_coords(adata):
     return np.vstack((x, y, z)).T
 
 
-def flip_coordinates(data):
-    # Assuming data is a numpy array of shape (n, 3) with columns [x, y, z]
-    flipped_data = data.copy()
-    flipped_data[:, 2] = -flipped_data[:, 2]  # Flip y-coordinates
-    return flipped_data
+def flip_coordinates(points, symmetry_line=227.5):
+    """
+    Flip the z values of points in a 3D numpy array along a given line of symmetry.
 
-# coords1 = extract_coords(adata1)
-# coords1 = flip_coordinates(coords1)
-#
-# adata1.obs['CCF_AP_axis'].values = coords1[0]
-# adata1.obs['CCF_ML_axis'].values = coords1[1]
-# adata1.obs['CCF_DV_axis'].values = coords1[2]
+    Parameters:
+    points (numpy.ndarray): A 2D numpy array with shape (n, 3) where each row represents a point (x, y, z).
+    symmetry_line (float): The z value along which to flip the points. Default is 227.5.
+
+    Returns:
+    numpy.ndarray: A numpy array with the z values flipped along the specified line of symmetry.
+    """
+    flipped_points = points.copy()
+    flipped_points[:, 2] = 2 * symmetry_line - flipped_points[:, 2]
+    return flipped_points
 
 # Cut data into pieces for faster prototyping
-cut_data = True
+cut_data = False
 if cut_data:
-    cut_data_factor = 40
+    np.random.seed(42)
+
+    cut_data_factor = 80
     num_cells = adata1.shape[0]
     indices = np.random.permutation(num_cells)
     split = indices[:num_cells // cut_data_factor]
@@ -78,7 +82,6 @@ if cut_data:
     print('WARNING: Data split')
 
 coords1 = extract_coords(adata1)
-coords1 = flip_coordinates(coords1)
 coords2 = extract_coords(adata2)
 coords3 = extract_coords(adata3)
 coords4 = extract_coords(adata4)
@@ -111,7 +114,7 @@ plt.savefig('graph.png', bbox_inches='tight')
 #
 # for category in common_categories:
 #
-#     if category != "CP":
+#     if category != "PVT":
 #         continue
 #
 #     indices1 = brain_regions1.groups[category]

@@ -44,7 +44,7 @@ def euclidean_distance(point1, point2):
 
 
 def match(adata1, adata2):
-    if len(adata1) == 1 or len(adata2) == 1: return
+    if len(adata1) <= 1 or len(adata2) <= 1: return
     print(f"Started calculations for region {adata1[0].obs['CCFname']}...")
 
     # Extract spatial coordinates
@@ -65,8 +65,8 @@ def match(adata1, adata2):
     # plt.savefig('graph.png', bbox_inches='tight')
 
     # Plot all cells from both datasets
-    neighours_fig.scatter(coords1[:, 2], coords1[:, 1], c='blue', label='adata1', alpha=0.5, s=0.2, linewidths=0.2)
-    neighours_fig.scatter(coords2[:, 2], coords2[:, 1], c='red', label='adata2', alpha=0.5, s=0.2, linewidths=0.2)
+    neighours_fig.scatter(coords1[:, 2], coords1[:, 1], c='blue', alpha=0.5, s=0.2, linewidths=0.2)
+    neighours_fig.scatter(coords2[:, 2], coords2[:, 1], c='red', alpha=0.5, s=0.2, linewidths=0.2)
     label_cells = False
     if label_cells:
         for cell_Idx, cell_coord in enumerate(coords1):
@@ -108,8 +108,8 @@ def match(adata1, adata2):
             spatial_distance = physical_distances[idx]
             expression_distance = expression_distances[idx]
             if spatial_distance > 0 and expression_distance > 0:
-                adjusted_spt_distance = weighted_distance(spatial_distance, 1, (distance_thresholds[cell_idx])) * 1
-                adjusted_expression_distance = expression_distance * 50
+                adjusted_spt_distance = weighted_distance(spatial_distance, 1, (distance_thresholds[cell_idx])) * 2
+                adjusted_expression_distance = expression_distance
                 distances_matrix[cell_idx, neighbour_indices[cell_idx][idx]] = np.add(adjusted_spt_distance,
                                                                                       adjusted_expression_distance)
 
@@ -203,7 +203,7 @@ def valid_match(adjusted_distance, cell_coords1, cell_coords2, threshold):
     return False
 
 
-def split_in_eights(adata):
+def split_in_cubes(adata, num_divisions):
     # Extract coordinates
     x = adata.obs['CCF_AP_axis'].values
     y = adata.obs['CCF_ML_axis'].values
@@ -214,30 +214,23 @@ def split_in_eights(adata):
     y_min, y_max = y.min(), y.max()
     z_min, z_max = z.min(), z.max()
 
-    # Calculate midpoints
-    x_mid = (x_min + x_max) / 2
-    y_mid = (y_min + y_max) / 2
-    z_mid = (z_min + z_max) / 2
-
-    # Define the 8 regions
-    regions = [
-        (x < x_mid) & (y < y_mid) & (z < z_mid),
-        (x < x_mid) & (y < y_mid) & (z >= z_mid),
-        (x < x_mid) & (y >= y_mid) & (z < z_mid),
-        (x < x_mid) & (y >= y_mid) & (z >= z_mid),
-        (x >= x_mid) & (y < y_mid) & (z < z_mid),
-        (x >= x_mid) & (y < y_mid) & (z >= z_mid),
-        (x >= x_mid) & (y >= y_mid) & (z < z_mid),
-        (x >= x_mid) & (y >= y_mid) & (z >= z_mid)
-    ]
+    # Calculate division points
+    x_divs = np.linspace(x_min, x_max, num_divisions + 1)
+    y_divs = np.linspace(y_min, y_max, num_divisions + 1)
+    z_divs = np.linspace(z_min, z_max, num_divisions + 1)
 
     # Create a list to hold the sub-AnnData objects
     sub_adatas = []
 
-    # Loop through each region and create sub-AnnData objects
-    for region in regions:
-        sub_adata = adata[region].copy()  # Make a copy to ensure independence
-        sub_adatas.append(sub_adata)
+    # Loop through each combination of regions
+    for i in range(num_divisions):
+        for j in range(num_divisions):
+            for k in range(num_divisions):
+                region = ((x >= x_divs[i]) & (x < x_divs[i + 1]) &
+                          (y >= y_divs[j]) & (y < y_divs[j + 1]) &
+                          (z >= z_divs[k]) & (z < z_divs[k + 1]))
+                sub_adata = adata[region].copy()  # Make a copy to ensure independence
+                sub_adatas.append(sub_adata)
 
     return sub_adatas
 
@@ -251,14 +244,16 @@ np.set_printoptions(edgeitems=100)
 
 # Define constants
 absolute_distance_threshold = 100  # In CCF units
-num_neighbours = 300
+num_neighbours = 200
 
 # Load AnnData objects
 adata1_path = sys.argv[1]
 adata2_path = sys.argv[2]
 
-matches_name = f"{time.time()}-{adata1_path.split("/")[-1]}-{adata2_path.split("/")[-1]}-Matches.npy"
-plot_path = f"Plots/{time.time()}-{adata1_path.split("/")[-1]}-{adata2_path.split("/")[-1]}-Matches.png"
+matches_name = (f"{round(time.time())}-{(adata1_path.split("/")[-1]).split(".")[0]}-"
+                f"{(adata2_path.split("/")[-1]).split(".")[0]}-Matches.npy")
+plot_path = (f"Plots/{round(time.time())}-{(adata1_path.split("/")[-1]).split(".")[0]}-"
+             f"{(adata2_path.split("/")[-1]).split(".")[0]}-Matches.png")
 
 full_adata1 = sc.read_h5ad(adata1_path)
 full_adata2 = sc.read_h5ad(adata2_path)
@@ -268,7 +263,7 @@ cut_data = False
 if cut_data:
     np.random.seed(42)
 
-    cut_data_factor = 40
+    cut_data_factor = 100
     num_cells = full_adata1.shape[0]
     indices = np.random.permutation(num_cells)
     split = indices[:num_cells // cut_data_factor]
@@ -313,8 +308,8 @@ all_matches_tracker = 0
 
 for category in common_categories:
 
-    if category != "CP":
-        continue
+    # if category != "CP":
+    #     continue
 
     indices1 = brain_regions1.groups[category]
     indices2 = brain_regions2.groups[category]
@@ -326,8 +321,8 @@ for category in common_categories:
     adata2_subset = full_adata2[indices2]
 
     if len(adata1_subset) > 100000 or len(adata2_subset) > 100000:
-        adata1_subset_cut_array = split_in_eights(adata1_subset)
-        adata2_subset_cut_array = split_in_eights(adata2_subset)
+        adata1_subset_cut_array = split_in_cubes(adata1_subset, 3)
+        adata2_subset_cut_array = split_in_cubes(adata2_subset, 3)
         for idx in range(len(adata1_subset_cut_array)):
             print(f"Calculating matches for region: {category}, Subregion {idx}")
             print(adata1_subset_cut_array[idx])
@@ -347,7 +342,6 @@ np.save(matches_name, all_matches)
 
 neighours_fig.set_xlabel('X Coordinate')
 neighours_fig.set_ylabel('Y Coordinate')
-neighours_fig.legend()
 plt.savefig(plot_path, bbox_inches='tight')
 
 print("Plotting Done.")

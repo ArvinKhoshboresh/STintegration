@@ -7,22 +7,44 @@ def read_match_file(filename):
     return np.load(filename)
 
 
-def combine_matches(match_data):
+def combine_matches(match_data_struct):
+    def extend_chain(chain, length):
+        while len(chain) < length:
+            chain += (-99999,)
+        return chain
 
-    combined_matches = {}
-    for idx, match_array in enumerate(match_data):
-        for match in match_array:
-            start, end = match
-            if start not in combined_matches:
-                combined_matches[start] = [-999999] * 8
-            combined_matches[start][idx] = end
+    def build_chain(chain, index):
+        built_chain = ()
+        for idx in range(index):
+            built_chain += (-99999,)
+        built_chain += chain
+        return built_chain
 
-    valid_matches = []
-    for key, values in combined_matches.items():
-        if all(value != -999999 for value in values):
-            valid_matches.append((key, *values))
+    all_chains = []
 
-    return valid_matches
+    for idx, match_list in enumerate(match_data_struct):
+        new_chains = []
+        for a, b in match_list:
+            found_chain = False
+            for chain in all_chains:
+                if chain[-1] == a:
+                    chain += b
+                    found_chain = True
+                    break
+            if not found_chain:
+                new_chain = build_chain((a, b), idx)
+                new_chains.append(new_chain)
+
+        all_chains.extend(new_chains)
+
+    # Ensure all chains are filled with -99999 up to the maximum length
+    max_length = len(match_data_struct) + 1
+    all_chains = [extend_chain(chain, max_length) for chain in all_chains]
+
+    # Create chains without -99999
+    valid_chains = [chain for chain in all_chains if -99999 not in chain]
+
+    return valid_chains, all_chains
 
 
 def permute_all_tuples(array):
@@ -40,26 +62,28 @@ def permute_all_tuples(array):
     return permuted_array
 
 
-np.set_printoptions(edgeitems=100)
+np.set_printoptions(edgeitems=10)
 
-# match_files = [sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4],
-#                sys.argv[5], sys.argv[6], sys.argv[7], sys.argv[8]]
-# match_data = [read_match_file(file) for file in match_files]
-
-permute_matches = True
+permute_matches = False
 if permute_matches:
-    np_array_path = sys.argv[1]
-    matches = np.load(np_array_path)
-    match_files = [permute_all_tuples(matches), permute_all_tuples(matches), permute_all_tuples(matches),
-                   permute_all_tuples(matches), permute_all_tuples(matches), permute_all_tuples(matches),
-                   permute_all_tuples(matches), permute_all_tuples(matches)]
+    match_path = sys.argv[1]
+    matches = np.load(match_path)
+    match_data_struct = [permute_all_tuples(matches), permute_all_tuples(matches), permute_all_tuples(matches),
+                         permute_all_tuples(matches), permute_all_tuples(matches), permute_all_tuples(matches),
+                         permute_all_tuples(matches), permute_all_tuples(matches)]
+else:
+    match_paths = [sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6], sys.argv[7]]
+    match_data_struct = [read_match_file(file) for file in match_paths]
 
 # print(match_files)
 
-valid_matches = combine_matches(match_files)
-print("Total number of tuples with 8 valid matches:", len(valid_matches))
+valid_chains, all_chains = combine_matches(match_data_struct)
 
-print(valid_matches)
+print(all_chains)
+
+print(f"Total number of full chains: {len(valid_chains)}\n")
+
+print(valid_chains)
 
 # Save valid matches to disk if needed
 # np.save('valid_matches.npy', np.array(valid_matches))
