@@ -1,6 +1,5 @@
 import time
 import scanpy as sc
-from scipy.sparse import lil_matrix
 from scipy.spatial import KDTree
 import numpy as np
 import math

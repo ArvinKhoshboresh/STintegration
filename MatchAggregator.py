@@ -3,10 +3,6 @@ import random
 import numpy as np
 
 
-def read_match_file(filename):
-    return np.load(filename)
-
-
 def combine_matches(match_data_struct):
     def extend_chain(chain, length):
         while len(chain) < length:
@@ -62,6 +58,15 @@ def permute_all_tuples(array):
     return permuted_array
 
 
+def remove_trailing_zeros(tuples_list):
+    reversed_list = tuples_list[::-1]
+
+    while reversed_list and reversed_list[0] == (0, 0):
+        reversed_list.pop(0)
+
+    return reversed_list[::-1]
+
+
 np.set_printoptions(edgeitems=10)
 
 permute_matches = False
@@ -73,7 +78,9 @@ if permute_matches:
                          permute_all_tuples(matches), permute_all_tuples(matches)]
 else:
     match_paths = [sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6], sys.argv[7]]
-    match_data_struct = [read_match_file(file) for file in match_paths]
+    match_data_struct = [np.load(file) for file in match_paths]
+
+match_data_struct = remove_trailing_zeros(match_data_struct[:])
 
 # print(match_files)
 

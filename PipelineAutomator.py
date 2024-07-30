@@ -1,4 +1,7 @@
 import subprocess
+import time
+
+time1 = time.time()
 
 files = [
     "/home/arvin/barseq/controls/Control_1.mat.h5ad",
@@ -16,4 +19,4 @@ for i in range(len(files) - 1):
     print(f"Matching {file1} with {file2}")
     subprocess.run(["python", "MatchingByRegion.py", file1, file2])
 
-print("All Files Done.")
+print(f"All Files Done. Took {time.time() - time1}")
