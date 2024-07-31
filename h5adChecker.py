@@ -7,16 +7,10 @@ from matplotlib import pyplot as plt
 np.set_printoptions(edgeitems=30)
 
 # Load the h5ad file
-h5ad_path1 = sys.argv[1]
-h5ad_path2 = sys.argv[2]
-h5ad_path3 = sys.argv[3]
-h5ad_path4 = sys.argv[4]
-adata1 = sc.read_h5ad(h5ad_path1)
-adata2 = sc.read_h5ad(h5ad_path2)
-adata3 = sc.read_h5ad(h5ad_path3)
-adata4 = sc.read_h5ad(h5ad_path4)
+match_paths = [sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6], sys.argv[7], sys.argv[8]]
+adata_struct = [sc.read(file) for file in match_paths]
 
-print(adata1)
+print(adata_struct)
 
 # print(adata1.obs["subclass"].nunique())
 
@@ -53,53 +47,78 @@ def flip_coordinates(points, symmetry_line=227.5):
     flipped_points[:, 2] = 2 * symmetry_line - flipped_points[:, 2]
     return flipped_points
 
-# Cut data into pieces for faster prototyping
-cut_data = False
-if cut_data:
-    np.random.seed(42)
+# # Cut data into pieces for faster prototyping
+# cut_data = False
+# if cut_data:
+#     np.random.seed(42)
+#
+#     cut_data_factor = 80
+#     num_cells = adata1.shape[0]
+#     indices = np.random.permutation(num_cells)
+#     split = indices[:num_cells // cut_data_factor]
+#     adata1 = adata1[split].copy()
+#
+#     num_cells = adata2.shape[0]
+#     indices = np.random.permutation(num_cells)
+#     split = indices[:num_cells // cut_data_factor]
+#     adata2 = adata2[split].copy()
+#
+#     num_cells = adata3.shape[0]
+#     indices = np.random.permutation(num_cells)
+#     split = indices[:num_cells // cut_data_factor]
+#     adata3 = adata3[split].copy()
+#
+#     num_cells = adata4.shape[0]
+#     indices = np.random.permutation(num_cells)
+#     split = indices[:num_cells // cut_data_factor]
+#     adata4 = adata4[split].copy()
+#
+#     print('WARNING: Data split')
 
-    cut_data_factor = 80
-    num_cells = adata1.shape[0]
-    indices = np.random.permutation(num_cells)
-    split = indices[:num_cells // cut_data_factor]
-    adata1 = adata1[split].copy()
 
-    num_cells = adata2.shape[0]
-    indices = np.random.permutation(num_cells)
-    split = indices[:num_cells // cut_data_factor]
-    adata2 = adata2[split].copy()
+def remove_trailing_zeros(tuples_array):
+    last_non_zero_index = len(tuples_array)
+    for i in range(len(tuples_array) - 1, -1, -1):
+        if not np.array_equal(tuples_array[i], [0, 0]):
+            last_non_zero_index = i + 1
+            break
 
-    num_cells = adata3.shape[0]
-    indices = np.random.permutation(num_cells)
-    split = indices[:num_cells // cut_data_factor]
-    adata3 = adata3[split].copy()
+    # Return the array up to the last non-(0, 0) index
+    return tuples_array[:last_non_zero_index]
 
-    num_cells = adata4.shape[0]
-    indices = np.random.permutation(num_cells)
-    split = indices[:num_cells // cut_data_factor]
-    adata4 = adata4[split].copy()
 
-    print('WARNING: Data split')
+match_paths = [sys.argv[9], sys.argv[10], sys.argv[11], sys.argv[12], sys.argv[13], sys.argv[14], sys.argv[15]]
+match_data_struct = [np.load(file) for file in match_paths]
+match_data_struct = [remove_trailing_zeros(matches) for matches in match_data_struct]
 
-coords1 = extract_coords(adata1)
-coords2 = extract_coords(adata2)
-coords3 = extract_coords(adata3)
-coords4 = extract_coords(adata4)
+for i in range(len(adata_struct) - 1):
+    print(adata_struct[i])
+    print(adata_struct[i + 1])
+    print(f"# of matches: {len(match_data_struct[i])}\n")
+    print(f"% of max matches: {len(match_data_struct[i]) / min(len(adata_struct[i]), len(adata_struct[i + 1]))}\n")
 
-# Plot this region in Coronal view
-fig, neighours_fig = plt.subplots(figsize=(15, 10), dpi=800)
-# Plot all cells from both datasets
-neighours_fig.scatter(coords1[:, 2], coords1[:, 1], c='red', label='adata1', alpha=0.5, s=0.2, linewidths=0.3)
-neighours_fig.scatter(coords2[:, 2], coords2[:, 1], c='blue', label='adata2', alpha=0.5, s=0.2, linewidths=0.3)
-neighours_fig.scatter(coords3[:, 2], coords3[:, 1], c='green', label='adata3', alpha=0.5, s=0.2, linewidths=0.3)
-neighours_fig.scatter(coords4[:, 2], coords4[:, 1], c='orange', label='adata4', alpha=0.5, s=0.2, linewidths=0.3)
-# for cell_Idx, cell_coord in enumerate(coords1):
-#     neighours_fig.annotate(adata1.obs['slice'][cell_Idx], (cell_coord[2], cell_coord[1]), fontsize=1)
-# for cell_Idx, cell_coord in enumerate(coords2):
-#     neighours_fig.annotate(adata2.obs['slice'][cell_Idx], (cell_coord[2], cell_coord[1]), fontsize=1)
-neighours_fig.set_xlabel('Z Coordinate')
-neighours_fig.set_ylabel('Y Coordinate')
-plt.savefig('graph.png', bbox_inches='tight')
+
+
+
+# coords1 = extract_coords(adata1)
+# coords2 = extract_coords(adata2)
+# coords3 = extract_coords(adata3)
+# coords4 = extract_coords(adata4)
+#
+# # Plot this region in Coronal view
+# fig, neighours_fig = plt.subplots(figsize=(15, 10), dpi=800)
+# # Plot all cells from both datasets
+# neighours_fig.scatter(coords1[:, 2], coords1[:, 1], c='red', label='adata1', alpha=0.5, s=0.2, linewidths=0.3)
+# neighours_fig.scatter(coords2[:, 2], coords2[:, 1], c='blue', label='adata2', alpha=0.5, s=0.2, linewidths=0.3)
+# neighours_fig.scatter(coords3[:, 2], coords3[:, 1], c='green', label='adata3', alpha=0.5, s=0.2, linewidths=0.3)
+# neighours_fig.scatter(coords4[:, 2], coords4[:, 1], c='orange', label='adata4', alpha=0.5, s=0.2, linewidths=0.3)
+# # for cell_Idx, cell_coord in enumerate(coords1):
+# #     neighours_fig.annotate(adata1.obs['slice'][cell_Idx], (cell_coord[2], cell_coord[1]), fontsize=1)
+# # for cell_Idx, cell_coord in enumerate(coords2):
+# #     neighours_fig.annotate(adata2.obs['slice'][cell_Idx], (cell_coord[2], cell_coord[1]), fontsize=1)
+# neighours_fig.set_xlabel('Z Coordinate')
+# neighours_fig.set_ylabel('Y Coordinate')
+# plt.savefig('graph.png', bbox_inches='tight')
 
 
 

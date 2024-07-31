@@ -149,8 +149,8 @@ def match(adata1, adata2):
             if valid_match(distances_matrix[idx, matches[idx]],
                            cell_coords1, cell_coords2, distance_thresholds[idx]):
                 neighours_fig.plot([cell_coords1[2], cell_coords2[2]], [cell_coords1[1], cell_coords2[1]], 'r-', lw=0.03)
-                all_matches[all_matches_tracker] = (adata1.obs_names[idx],
-                                                    adata2.obs_names[matches[idx]])
+                all_matches[all_matches_tracker][0] = adata1.obs_names[idx]
+                all_matches[all_matches_tracker][1] = adata2.obs_names[matches[idx]]
                 all_matches_tracker += 1
                 # print("   Plotted cell.")
             else:
@@ -302,7 +302,7 @@ brain_regions2 = full_adata2.obs.groupby("CCFname")
 common_categories = sorted(set(brain_regions1.groups.keys()).intersection(set(brain_regions2.groups.keys())))
 
 removed_cell_tracker = 0
-all_matches = np.zeros(len(full_adata1), dtype=(np.int32, 2))
+all_matches = np.zeros(len(full_adata1), dtype=[np.int32, 2])
 all_matches_tracker = 0
 
 for category in common_categories:
