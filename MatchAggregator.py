@@ -1,10 +1,11 @@
 import sys
 import random
 import time
-
+from 
 import numpy as np
 
 
+@profiler
 def combine_matches(match_data_struct):
     def extend_chain(chain, length):
         while len(chain) < length:
@@ -47,39 +48,38 @@ def combine_matches(match_data_struct):
 
 
 
-
-    def extend_chain(chain, length):
-        return chain + (-99999,) * (length - len(chain))
-
-    def build_chain(chain, index):
-        return (-99999,) * index + chain
-
-    all_chains = []
-    chain_map = {}  # Map to keep track of chains by their last element
-
-    for idx, match_list in enumerate(match_data_struct):
-        print(f"Chaining matches {idx}...")
-        new_chains = []
-        for a, b in match_list:
-            if a in chain_map:
-                chain_map[a] += (b,)
-                chain_map[b] = chain_map[a]
-                del chain_map[a]
-            else:
-                new_chain = build_chain((a, b), idx)
-                new_chains.append(new_chain)
-                chain_map[b] = new_chain
-
-        all_chains.extend(new_chains)
-
-    # Ensure all chains are filled with -99999 up to the maximum length
-    max_length = len(match_data_struct) + 1
-    all_chains = [extend_chain(chain, max_length) for chain in all_chains]
-
-    # Create chains without -99999
-    valid_chains = [chain for chain in all_chains if -99999 not in chain]
-
-    return valid_chains, all_chains
+    # def extend_chain(chain, length):
+    #     return chain + (-99999,) * (length - len(chain))
+    #
+    # def build_chain(chain, index):
+    #     return (-99999,) * index + chain
+    #
+    # all_chains = []
+    # chain_map = {}  # Map to keep track of chains by their last element
+    #
+    # for idx, match_list in enumerate(match_data_struct):
+    #     print(f"Chaining matches {idx}...")
+    #     new_chains = []
+    #     for a, b in match_list:
+    #         if a in chain_map:
+    #             chain_map[a] += (b,)
+    #             chain_map[b] = chain_map[a]
+    #             del chain_map[a]
+    #         else:
+    #             new_chain = build_chain((a, b), idx)
+    #             new_chains.append(new_chain)
+    #             chain_map[b] = new_chain
+    #
+    #     all_chains.extend(new_chains)
+    #
+    # # Ensure all chains are filled with -99999 up to the maximum length
+    # max_length = len(match_data_struct) + 1
+    # all_chains = [extend_chain(chain, max_length) for chain in all_chains]
+    #
+    # # Create chains without -99999
+    # valid_chains = [chain for chain in all_chains if -99999 not in chain]
+    #
+    # return valid_chains, all_chains
 
 
 def permute_all_tuples(matrix):
@@ -125,7 +125,21 @@ else:
 
 match_data_struct = remove_trailing_zeros(match_data_struct[:])
 
-# print(match_files)
+print(len(match_data_struct[0]))
+
+cut_data = True
+if cut_data:
+    np.random.seed(42)
+    print("Data Split.")
+
+    for idx, match_file in enumerate(match_data_struct):
+        cut_data_factor = 100
+        num_chains = match_file.shape[0]
+        indices = np.random.permutation(num_chains)
+        split = indices[:num_chains // cut_data_factor]
+        match_data_struct[idx] = match_file[split].copy()
+
+print(len(match_data_struct[0]))
 
 valid_chains, all_chains = combine_matches(match_data_struct)
 
