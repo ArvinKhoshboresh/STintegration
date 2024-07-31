@@ -1,5 +1,7 @@
 import sys
 import random
+import time
+
 import numpy as np
 
 
@@ -19,6 +21,7 @@ def combine_matches(match_data_struct):
     all_chains = []
 
     for idx, match_list in enumerate(match_data_struct):
+        print(f"Chaining matches {idx}...")
         new_chains = []
         for a, b in match_list:
             found_chain = False
@@ -43,29 +46,69 @@ def combine_matches(match_data_struct):
     return valid_chains, all_chains
 
 
-def permute_all_tuples(array):
-    # Extract the second elements of each tuple
-    first_elements = [t[0] for t in array]
-    second_elements = [t[1] for t in array]
 
-    # Shuffle the second elements randomly
-    random.shuffle(first_elements)
-    random.shuffle(second_elements)
 
-    # Create new tuples with the original first elements and permuted second elements
-    permuted_array = np.array([(first_elements[i], second_elements[i]) for i in range(len(array))])
+    def extend_chain(chain, length):
+        return chain + (-99999,) * (length - len(chain))
 
-    return permuted_array
+    def build_chain(chain, index):
+        return (-99999,) * index + chain
+
+    all_chains = []
+    chain_map = {}  # Map to keep track of chains by their last element
+
+    for idx, match_list in enumerate(match_data_struct):
+        print(f"Chaining matches {idx}...")
+        new_chains = []
+        for a, b in match_list:
+            if a in chain_map:
+                chain_map[a] += (b,)
+                chain_map[b] = chain_map[a]
+                del chain_map[a]
+            else:
+                new_chain = build_chain((a, b), idx)
+                new_chains.append(new_chain)
+                chain_map[b] = new_chain
+
+        all_chains.extend(new_chains)
+
+    # Ensure all chains are filled with -99999 up to the maximum length
+    max_length = len(match_data_struct) + 1
+    all_chains = [extend_chain(chain, max_length) for chain in all_chains]
+
+    # Create chains without -99999
+    valid_chains = [chain for chain in all_chains if -99999 not in chain]
+
+    return valid_chains, all_chains
+
+
+def permute_all_tuples(matrix):
+    # Convert input matrix to numpy array if it isn't already
+    matrix = np.array(matrix)
+
+    # Get the number of rows and columns
+    n, m = matrix.shape
+
+    # Create a new matrix to store the randomized rows
+    randomized_matrix = np.empty_like(matrix)
+
+    # Randomly shuffle rows for each column
+    for col in range(m):
+        randomized_matrix[:, col] = np.random.permutation(matrix[:, col])
+
+    return randomized_matrix
 
 
 def remove_trailing_zeros(tuples_list):
     reversed_list = tuples_list[::-1]
 
-    while reversed_list and reversed_list[0] == (0, 0):
+    while (reversed_list[0] == (0, 0)).all():
         reversed_list.pop(0)
 
     return reversed_list[::-1]
 
+
+time1 = time.time()
 
 np.set_printoptions(edgeitems=10)
 
@@ -93,4 +136,7 @@ print(f"Total number of full chains: {len(valid_chains)}\n")
 print(valid_chains)
 
 # Save valid matches to disk if needed
-# np.save('valid_matches.npy', np.array(valid_matches))
+np.save('all_chains.npy', np.array(all_chains))
+np.save('valid_chains.npy', np.array(valid_chains))
+
+print(f"Script Took {time.time() - time1}s")

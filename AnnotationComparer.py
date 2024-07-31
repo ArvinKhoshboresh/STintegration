@@ -4,18 +4,21 @@ import sys
 import random
 
 
-def permute_tuples(array):
-    print("WARNING PERMUTE IS NOT WORKING!!!! THESE RESULTS ARE NOT VALID!!!!")
-    # Extract the second elements of each tuple
-    second_elements = [t[1] for t in array]
+def permute_rows(matrix):
+    # Convert input matrix to numpy array if it isn't already
+    matrix = np.array(matrix)
 
-    # Shuffle the second elements randomly
-    random.shuffle(second_elements)
+    # Get the number of rows and columns
+    n, m = matrix.shape
 
-    # Create new tuples with the original first elements and permuted second elements
-    permuted_array = np.array([(array[i][0], second_elements[i]) for i in range(len(array))])
+    # Create a new matrix to store the randomized rows
+    randomized_matrix = np.empty_like(matrix)
 
-    return permuted_array
+    # Randomly shuffle rows for each column
+    for col in range(m):
+        randomized_matrix[:, col] = np.random.permutation(matrix[:, col])
+
+    return randomized_matrix
 
 
 # Load AnnData objects
@@ -35,7 +38,7 @@ print(f"Matches length: {matches_length}")
 
 permute_matches = False
 if permute_matches:
-    matches = permute_tuples(matches)
+    matches = permute_rows(matches)
 
 print(matches)
 
