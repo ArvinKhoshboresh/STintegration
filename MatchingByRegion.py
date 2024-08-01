@@ -234,9 +234,33 @@ def split_in_cubes(adata, num_divisions):
     return sub_adatas
 
 
-# average_spatial_distance_mult = 0
-# average_weighted_spatial_mult = 0
-# cell_counter = 0
+def cut_window_middle(adata, size):
+    # Assuming 'adata' is your AnnData object
+    x = adata.obs['CCF_AP_axis'].values
+    y = adata.obs['CCF_ML_axis'].values
+    z = adata.obs['CCF_DV_axis'].values
+
+    # Find the center of each axis
+    center_x = (x.min() + x.max()) / 2
+    center_y = (y.min() + y.max()) / 2
+    center_z = (z.min() + z.max()) / 2
+
+    cut_factor = size / 2
+
+    # Define the bounds for the 10x10x10 window
+    x_min, x_max = center_x - cut_factor, center_x + cut_factor
+    y_min, y_max = center_y - cut_factor, center_y + cut_factor
+    z_min, z_max = center_z - cut_factor, center_z + cut_factor
+
+    # Filter the AnnData object based on these bounds
+    mask = (x >= x_min) & (x <= x_max) & (y >= y_min) & (y <= y_max) & (z >= z_min) & (z <= z_max)
+    adata_filtered = adata[mask]
+
+    # Verify the shape of the filtered data
+    print(f"Window Cut: {adata_filtered}")
+
+    return adata_filtered
+
 
 start_time = time.time()
 np.set_printoptions(edgeitems=100)
@@ -257,6 +281,9 @@ plot_path = (f"Plots/{round(time.time())}-{(adata1_path.split("/")[-1]).split(".
 full_adata1 = sc.read_h5ad(adata1_path)
 full_adata2 = sc.read_h5ad(adata2_path)
 
+print(full_adata1)
+print(full_adata2)
+
 # Cut data into pieces for faster prototyping
 cut_data = False
 if cut_data:
@@ -275,8 +302,10 @@ if cut_data:
 
     print('WARNING: Data split')
 
-print(full_adata1)
-print(full_adata2)
+cut_window = True
+if cut_window:
+    full_adata1 = cut_window_middle(full_adata1, 40)
+    full_adata2 = cut_window_middle(full_adata2, 40)
 
 # # Plot the whole brain in 3d
 # fig = plt.figure(figsize=(15, 10), dpi=900)
@@ -302,19 +331,13 @@ brain_regions2 = full_adata2.obs.groupby("CCFname")
 common_categories = sorted(set(brain_regions1.groups.keys()).intersection(set(brain_regions2.groups.keys())))
 
 removed_cell_tracker = 0
-all_matches = np.zeros(len(full_adata1), dtype=[np.int32, 2])
+all_matches = np.zeros(len(full_adata1), dtype=(np.int32, 2))
 all_matches_tracker = 0
 
 for category in common_categories:
 
-    # if category != "CP":
-    #     continue
-
     indices1 = brain_regions1.groups[category]
     indices2 = brain_regions2.groups[category]
-
-    # adata1_subset = full_adata1[full_adata1.obs_names.isin(indices1)]
-    # adata2_subset = full_adata2[full_adata2.obs_names.isin(indices2)]
 
     adata1_subset = full_adata1[indices1]
     adata2_subset = full_adata2[indices2]
