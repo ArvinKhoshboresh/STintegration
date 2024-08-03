@@ -1,45 +1,11 @@
+import glob
+import os
 import sys
 import time
 import numpy as np
 
 
 def combine_matches(match_data_struct):
-    # def build_chain(chain, index):
-    #     built_chain = []
-    #     for idx in range(index):
-    #         built_chain.append(-99999)
-    #     built_chain.append(chain[0])
-    #     built_chain.append(chain[1])
-    #     return built_chain
-    #
-    # all_chains = []
-    # chain_map = {}  # Map to keep track of chains by their last element
-    #
-    # for idx, match_list in enumerate(match_data_struct):
-    #     print(f"Chaining matches {idx}...")
-    #     new_chains = []
-    #     for a, b in match_list:
-    #         if a in chain_map:
-    #             chain_map[a] += (b,)
-    #             chain_map[b] = chain_map[a]
-    #             del chain_map[a]
-    #         else:
-    #             new_chain = build_chain((a, b), idx)
-    #             new_chains.append(new_chain)
-    #             chain_map[b] = new_chain
-    #
-    #     all_chains.extend(new_chains)
-    #
-    # for chain in chain_map:
-    #     all_chains.append(chain)
-    #
-    # # Create chains without -99999
-    # max_length = len(match_data_struct) + 1
-    # valid_chains = [chain for chain in all_chains if isinstance(chain, (list, np.ndarray))
-    #                 and -99999 not in chain
-    #                 and len(chain) == max_length]
-    #
-    # return valid_chains
 
     chains = match_data_struct[0]
     for idx, match_list in enumerate(match_data_struct[1:]):
@@ -90,7 +56,9 @@ def remove_trailing_zeros(tuples_array):
 
 time1 = time.time()
 
-match_paths = [sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6], sys.argv[7]]
+# Path to the directory containing the .npy files
+folder_path = 'Matches/'
+match_paths = glob.glob(os.path.join(folder_path, '*.npy'))
 match_data_struct = [np.load(file) for file in match_paths]
 match_data_struct = [remove_trailing_zeros(matches) for matches in match_data_struct]
 

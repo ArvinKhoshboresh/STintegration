@@ -64,12 +64,13 @@ def match(adata1, adata2):
     # plt.savefig('graph.png', bbox_inches='tight')
 
     # Plot all cells from both datasets
-    neighours_fig.scatter(coords1[:, 2], coords1[:, 1], c='blue', alpha=0.5, s=0.2, linewidths=0.2)
-    neighours_fig.scatter(coords2[:, 2], coords2[:, 1], c='red', alpha=0.5, s=0.2, linewidths=0.2)
-    label_cells = False
-    if label_cells:
-        for cell_Idx, cell_coord in enumerate(coords1):
-            neighours_fig.annotate(cell_Idx, (cell_coord[0], cell_coord[1]), fontsize=4)
+    if plot:
+        neighours_fig.scatter(coords1[:, 2], coords1[:, 1], c='blue', alpha=0.5, s=0.2, linewidths=0.2)
+        neighours_fig.scatter(coords2[:, 2], coords2[:, 1], c='red', alpha=0.5, s=0.2, linewidths=0.2)
+        label_cells = False
+        if label_cells:
+            for cell_Idx, cell_coord in enumerate(coords1):
+                neighours_fig.annotate(cell_Idx, (cell_coord[0], cell_coord[1]), fontsize=4)
 
     # Construct KDTree for AnnData objects
     kdtree2 = KDTree(coords2)
@@ -107,7 +108,7 @@ def match(adata1, adata2):
             spatial_distance = physical_distances[idx]
             expression_distance = expression_distances[idx]
             if spatial_distance > 0 and expression_distance > 0:
-                adjusted_spt_distance = weighted_distance(spatial_distance, 1, (distance_thresholds[cell_idx])) * 2
+                adjusted_spt_distance = weighted_distance(spatial_distance, 1, (distance_thresholds[cell_idx])) * 0
                 adjusted_expression_distance = expression_distance
                 distances_matrix[cell_idx, neighbour_indices[cell_idx][idx]] = np.add(adjusted_spt_distance,
                                                                                       adjusted_expression_distance)
@@ -148,7 +149,9 @@ def match(adata1, adata2):
             cell_coords2 = coords2[matches[idx], :]
             if valid_match(distances_matrix[idx, matches[idx]],
                            cell_coords1, cell_coords2, distance_thresholds[idx]):
-                neighours_fig.plot([cell_coords1[2], cell_coords2[2]], [cell_coords1[1], cell_coords2[1]], 'r-', lw=0.03)
+                if plot:
+                    neighours_fig.plot([cell_coords1[2], cell_coords2[2]], [cell_coords1[1], cell_coords2[1]],
+                                       'r-', lw=0.03)
                 all_matches[all_matches_tracker][0] = adata1.obs_names[idx]
                 all_matches[all_matches_tracker][1] = adata2.obs_names[matches[idx]]
                 all_matches_tracker += 1
@@ -240,10 +243,14 @@ def cut_window_middle(adata, size):
     y = adata.obs['CCF_ML_axis'].values
     z = adata.obs['CCF_DV_axis'].values
 
-    # Find the center of each axis
-    center_x = (x.min() + x.max()) / 2
-    center_y = (y.min() + y.max()) / 2
-    center_z = (z.min() + z.max()) / 2
+    # # Find the center of each axis
+    # center_x = (x.min() + x.max()) / 2
+    # center_y = (y.min() + y.max()) / 2
+    # center_z = (z.min() + z.max()) / 2
+
+    center_x = 175
+    center_y = 175
+    center_z = 175
 
     cut_factor = size / 2
 
@@ -253,7 +260,8 @@ def cut_window_middle(adata, size):
     z_min, z_max = center_z - cut_factor, center_z + cut_factor
 
     # Filter the AnnData object based on these bounds
-    mask = (x >= x_min) & (x <= x_max) & (y >= y_min) & (y <= y_max) & (z >= z_min) & (z <= z_max)
+    # mask = (x >= x_min) & (x <= x_max) & (y >= y_min) & (y <= y_max) & (z >= z_min) & (z <= z_max)
+    mask = (y >= y_min) & (y <= y_max) & (z >= z_min) & (z <= z_max)
     adata_filtered = adata[mask]
 
     # Verify the shape of the filtered data
@@ -273,7 +281,7 @@ num_neighbours = 200
 adata1_path = sys.argv[1]
 adata2_path = sys.argv[2]
 
-matches_name = (f"{round(time.time())}-{(adata1_path.split("/")[-1]).split(".")[0]}-"
+matches_name = (f"Matches/{round(time.time())}-{(adata1_path.split("/")[-1]).split(".")[0]}-"
                 f"{(adata2_path.split("/")[-1]).split(".")[0]}-Matches.npy")
 plot_path = (f"Plots/{round(time.time())}-{(adata1_path.split("/")[-1]).split(".")[0]}-"
              f"{(adata2_path.split("/")[-1]).split(".")[0]}-Matches.png")
@@ -283,6 +291,8 @@ full_adata2 = sc.read_h5ad(adata2_path)
 
 print(full_adata1)
 print(full_adata2)
+
+plot = False
 
 # Cut data into pieces for faster prototyping
 cut_data = False
@@ -323,7 +333,8 @@ if cut_window:
 # print("Big Plotting done")
 
 # Create plot
-fig, neighours_fig = plt.subplots(figsize=(15, 10), dpi=1200)
+if plot:
+    fig, neighours_fig = plt.subplots(figsize=(15, 10), dpi=1200)
 
 brain_regions1 = full_adata1.obs.groupby("CCFname")
 brain_regions2 = full_adata2.obs.groupby("CCFname")
@@ -362,11 +373,11 @@ print(all_matches)
 # Write matches to disk
 np.save(matches_name, all_matches)
 
-neighours_fig.set_xlabel('X Coordinate')
-neighours_fig.set_ylabel('Y Coordinate')
-plt.savefig(plot_path, bbox_inches='tight')
-
-print("Plotting Done.")
+if plot:
+    neighours_fig.set_xlabel('X Coordinate')
+    neighours_fig.set_ylabel('Y Coordinate')
+    plt.savefig(plot_path, bbox_inches='tight')
+    print("Plotting Done.")
 
 # ################## UMAP Matching #################
 # # UMAPs are already computed in main.py

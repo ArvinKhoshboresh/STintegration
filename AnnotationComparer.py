@@ -37,7 +37,7 @@ print(adata_struct)
 chains = np.load(match_chains)
 print(f"Matches length: {len(chains)}")
 
-cut_chains = True
+cut_chains = False
 if cut_chains:
     np.random.seed(42)
     cut_data_factor = 100
