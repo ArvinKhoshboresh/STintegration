@@ -33,7 +33,7 @@ files = [
 adata_struct = [sc.read(file) for file in files]
 
 # Combine and cluster
-adatas = combine_and_cluster(adata_struct, n_clusters=10)
+adatas = combine_and_cluster(adata_struct, n_clusters=200)
 
 for idx, adata in enumerate(adatas):
-    adata.write_h5ad(filename=f"{files[idx]}-kclustered")
+    adata.write_h5ad(filename=f"{files[idx].split('.')[0]}-DeNovoClustered.h5ad")

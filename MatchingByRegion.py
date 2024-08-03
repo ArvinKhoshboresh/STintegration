@@ -108,7 +108,7 @@ def match(adata1, adata2):
             spatial_distance = physical_distances[idx]
             expression_distance = expression_distances[idx]
             if spatial_distance > 0 and expression_distance > 0:
-                adjusted_spt_distance = weighted_distance(spatial_distance, 1, (distance_thresholds[cell_idx])) * 0
+                adjusted_spt_distance = weighted_distance(spatial_distance, 1, (distance_thresholds[cell_idx]))
                 adjusted_expression_distance = expression_distance
                 distances_matrix[cell_idx, neighbour_indices[cell_idx][idx]] = np.add(adjusted_spt_distance,
                                                                                       adjusted_expression_distance)
@@ -274,7 +274,7 @@ start_time = time.time()
 np.set_printoptions(edgeitems=100)
 
 # Define constants
-absolute_distance_threshold = 100  # In CCF units
+absolute_distance_threshold = 60  # In CCF units
 num_neighbours = 200
 
 # Load AnnData objects
