@@ -1,9 +1,11 @@
 import sys
+import time
 import scanpy as sc
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.stats import ttest_ind
-from line_profiler_pycharm import profile
+import pandas as pd
+from statsmodels.multivariate.manova import MANOVA
+from sklearn.decomposition import PCA
 
 
 def extract_coords(adata):
@@ -40,16 +42,29 @@ def permute_rows(matrix):
     return randomized_matrix
 
 
-@profile
+def array_transformer(array):
+    # Step 1: Normalize to [0, 1]
+    min_val = np.min(array)
+    max_val = np.max(array)
+    normalized_array = (array - min_val) / (max_val - min_val)
+
+    return normalized_array
+
+
+def manova_calculator(idx, chain):
+
+
 def main():
+    time1 = time.time()
     np.set_printoptions(edgeitems=25)
 
     # Load AnnData objects
-    adata_paths = [sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6], sys.argv[7], sys.argv[8]]
+    adata_paths = [sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4],
+                   sys.argv[5], sys.argv[6], sys.argv[7], sys.argv[8]]
     adatas = [sc.read(file) for file in adata_paths]
     print(adatas)
 
-    all_coords = [extract_coords(adata) for adata in adatas]
+    # all_coords = [extract_coords(adata) for adata in adatas]
 
     match_chains = sys.argv[9]
 
@@ -59,7 +74,7 @@ def main():
     cut_chains = True
     if cut_chains:
         np.random.seed(42)
-        cut_data_factor = 20000
+        cut_data_factor = 50
         num_chains = len(chains)
         indices = np.random.permutation(num_chains)
         split = indices[:num_chains // cut_data_factor]
@@ -72,45 +87,77 @@ def main():
 
     print(chains)
 
-    t_stats = []
+    manova_stats = []
     average_coords = []
 
-    for chain in chains:
+    obs_names_dict = [{name: idx for idx, name in enumerate(adata.obs_names)} for adata in adatas]
+
+    for idx, chain in enumerate(chains):
+        print(f"{idx + 1}/{len(chains)}")
+
         control_ids = chain[:4]
         enucleated_ids = chain[4:]
 
-        control_expr = [adatas[i][str(idx)].X.toarray() for i, idx in enumerate(control_ids)]
-        enucleated_expr = [adatas[i+4][str(idx)].X.toarray() for i, idx in enumerate(enucleated_ids)]
+        controls = [adatas[idx2][obs_names_dict[idx2][str(control_id)]]
+                    for idx2, control_id in enumerate(control_ids)]
+        enucleateds = [adatas[idx2 + 4][obs_names_dict[idx2 + 4][str(enucleated_id)]]
+                       for idx2, enucleated_id in enumerate(enucleated_ids)]
 
-        # Perform t-test
-        t_stat, p_value = ttest_ind(control_expr, enucleated_expr)
-        print(t_stat)
-        t_stats.append(t_stat)
+        control_expr = [row.X.toarray()[0]
+                        for row in controls]
+        enucleated_expr = [row.X.toarray()[0]
+                           for row in enucleateds]
+
+        data = np.vstack([control_expr, enucleated_expr])
+
+        n_components = min(data.shape[0], data.shape[1]) - 1
+        pca = PCA(n_components=n_components)
+        data = pca.fit_transform(data)
+
+        labels = ['Control'] * len(control_expr) + ['Enucleated'] * len(enucleated_expr)
+        gene_numbers = [f'Gene{i + 1}' for i in range(n_components)]
+        df = pd.DataFrame(data, columns=gene_numbers)
+        df['Group'] = labels
+
+        formula = ' + '.join(gene_numbers) + ' ~ Group'
+        manova = MANOVA.from_formula(formula, data=df)
+        try:
+            result = manova.mv_test()
+        except:
+            print("SKIPPED. Probably a Singular Matrix.")
+
+        hotelling_lawley_trace = result.results['Group']['stat'].loc['Hotelling-Lawley trace', 'Value']
+        manova_stats.append(hotelling_lawley_trace)
+        print(hotelling_lawley_trace)
 
         # Get average coordinates
-        coords = [all_coords[i][np.where(adatas[i].obs_names == str(idx))] for i, idx in enumerate(chain)]
+        control_coords = [extract_coords(row) for row in controls]
+        enucleated_coords = [extract_coords(row) for row in enucleateds]
+        coords = np.vstack(control_coords + enucleated_coords)
         avg_coords = np.mean(coords, axis=0)
         print(f"avg_coords:{avg_coords}")
         average_coords.append(avg_coords)
 
     # Normalize t-stats for color mapping
-    norm = plt.Normalize(min(t_stats), max(t_stats))
+    # norm = plt.Normalize(vmin=min(manova_stats), vmax=max(manova_stats))
     cmap = plt.get_cmap('coolwarm')
+    print(np.array(manova_stats))
+    manova_stats = array_transformer(manova_stats)
+    print(manova_stats)
 
     # Plotting
     fig = plt.figure(dpi=1500)
     ax = fig.add_subplot(111, projection='3d')
 
-    for avg_coord, t_stat in zip(average_coords, t_stats):
-        color = cmap(norm(t_stat))
-        ax.scatter(avg_coord[0], avg_coord[1], avg_coord[2], color=color)
-
-    # Add a color bar
-    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
-    sm.set_array([])
-    plt.colorbar(sm, ax=ax, label='t-statistic')
+    for avg_coord, manova_stat in zip(average_coords, manova_stats):
+        color = cmap(manova_stat)
+        ax.scatter(avg_coord[0], avg_coord[1], avg_coord[2], color=color, s=0.2, lw=0)
+        # ax.text(avg_coord[0], avg_coord[1], avg_coord[2], manova_stat, fontsize=3)
 
     plt.savefig("warmth plot", bbox_inches='tight')
+
+    print("Plotted.")
+    print(f"Script took: {time.time() - time1}")
 
 
 if __name__ == "__main__":
